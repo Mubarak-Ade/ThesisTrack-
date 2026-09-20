@@ -1,0 +1,17 @@
+{
+  "name": "thesistrack",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @thesistrack/api dev & pnpm --filter @thesistrack/web dev",
+    "dev:api": "pnpm --filter @thesistrack/api dev",
+    "dev:web": "pnpm --filter @thesistrack/web dev",
+    "build": "pnpm --filter @thesistrack/shared build && pnpm --filter @thesistrack/api build && pnpm --filter @thesistrack/web build",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @thesistrack/api db:generate",
+    "db:migrate": "pnpm --filter @thesistrack/api db:migrate",
+    "db:push": "pnpm --filter @thesistrack/api db:push",
+    "db:studio": "pnpm --filter @thesistrack/api db:studio"
+  }
+}
