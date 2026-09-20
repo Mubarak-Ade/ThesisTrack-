@@ -1,37 +1,33 @@
 import { Request, Response, NextFunction } from 'express';
-import { ZodError } from 'zod';
+import { AppError, ValidationError } from '../errors/index.js';
+import { respondError } from '../lib/response.js';
 
-export class AppError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'AppError';
+export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction): void {
+  if (err instanceof ValidationError) {
+    respondError(res, err);
+    return;
   }
+
+  if (isAppError(err)) {
+    respondError(res, err);
+    return;
+  }
+
+  console.error(`Unhandled error: ${req.method} ${req.originalUrl}`, err);
+  res.status(500).json({
+    success: false,
+    error: {
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'An unexpected error occurred',
+    },
+  });
 }
 
-export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction) {
-  if (err instanceof ZodError) {
-    res.status(400).json({
-      error: 'Validation Error',
-      details: err.errors.map((e) => ({
-        path: e.path.join('.'),
-        message: e.message,
-      })),
-    });
-    return;
-  }
-
-  if (err instanceof AppError) {
-    res.status(err.statusCode).json({
-      error: err.message,
-    });
-    return;
-  }
-
-  console.error('Unhandled error:', err);
-  res.status(500).json({
-    error: 'Internal Server Error',
-  });
+function isAppError(err: Error): err is AppError {
+  return (
+    'statusCode' in err &&
+    'code' in err &&
+    typeof (err as AppError).statusCode === 'number' &&
+    typeof (err as AppError).code === 'string'
+  );
 }
