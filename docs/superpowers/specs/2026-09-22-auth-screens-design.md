@@ -95,8 +95,8 @@ variant (`StatusLayout`).
   `label`, `card`, `alert`, `badge`, `separator`, `progress`, `form` (plus
   others only if a screen requires them).
 - **lucide-react** as the icon set (shadcn default).
-- Vite dev proxy: `/api` → API origin (confirm existing `vite.config`; add if
-  missing) — required for the cookie-based refresh flow.
+- Vite dev proxy: **already configured** in `apps/web/vite.config.ts`
+  (`/api` → `http://localhost:5000`, port 5173) — verified, no change needed.
 
 ### Component inventory (`apps/web/src/components/`)
 
@@ -146,10 +146,10 @@ discriminator so the frontend routes on one field:
 {
   "status": "valid" | "already_activated" | "invalid",
   "invitation": {
-    "name": "…",
+    "name": "Benjamin S. Thompson",
     "email": "…",
     "role": "student" | "supervisor" | "admin",
-    "registrationNumber": "UG/2024/RES-0842"
+    "registrationNumber": "UG/2024/RES-0842" | null
   } | null
 }
 ```
@@ -159,14 +159,31 @@ discriminator so the frontend routes on one field:
   already `ACTIVE`.
 - `invalid`: unknown, expired, or non-activation token type.
 - Never returns an invitation payload unless `type === 'activation'`.
+- `name` is derived server-side as `` `${firstName} ${lastName}` `` (the
+  `users` table stores names split; there is no single `name` column).
 
-### 5.2 Repository join
+### 5.2 Schema addition: `registrationNumber`
 
-Extend `modules/auth/repository.ts` token lookup to include the user's
-`name`, `role`, and registration-number column from `schema/users.ts`
-(confirm exact column name during implementation; pass through as-is).
+The mockup's "REGISTRATION NUMBER" (UG/2024/RES-0842) has **no backing
+column** in `schema/users.ts` (verified: only email/firstName/lastName/
+passwordHash/role/isActive/timestamps). Therefore:
 
-### 5.3 `POST /auth/activate`
+- Add a nullable `registrationNumber: varchar('registration_number', { length: 32 })`
+  to the `users` table, with a Drizzle migration (`pnpm db:generate` +
+  `pnpm db:migrate`). Nullable — existing rows and supervisors/admins have
+  none.
+- Extend `modules/auth/repository.ts` token lookup to join `users` and read
+  `firstName`, `lastName`, `role`, `isActive`, `registrationNumber`.
+- The confirm-identity screen renders `registrationNumber` when present;
+  when `null` it shows "Not on file — contact your department" in muted
+  text (never a fake value).
+
+### 5.3 Public user
+
+`PublicUser` (`modules/users/types.ts`) is **not** changed; the invitation
+payload is assembled only inside the new endpoint.
+
+### 5.4 `POST /auth/activate`
 
 No change — already returns the public user consumed by the activation-success
 screen.
