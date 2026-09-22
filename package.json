@@ -1,12 +1,19 @@
 {
   "name": "thesistrack",
   "private": true,
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint-plugin-react": "^7.37.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "typescript-eslint": "^8.19.0"
+  },
   "scripts": {
     "dev": "pnpm --filter @thesistrack/api dev & pnpm --filter @thesistrack/web dev",
     "dev:api": "pnpm --filter @thesistrack/api dev",
     "dev:web": "pnpm --filter @thesistrack/web dev",
     "build": "pnpm --filter @thesistrack/shared build && pnpm --filter @thesistrack/api build && pnpm --filter @thesistrack/web build",
     "lint": "pnpm -r lint",
+    "test": "pnpm --filter @thesistrack/web test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "pnpm --filter @thesistrack/api db:generate",
