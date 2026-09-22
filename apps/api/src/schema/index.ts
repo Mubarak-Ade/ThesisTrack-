@@ -1,5 +1,6 @@
 export { users, usersRelations } from './users.js';
 export { sessions, sessionsRelations } from './sessions.js';
+export { accountTokens, accountTokensRelations } from './account-tokens.js';
 export { projects, projectsRelations } from './projects.js';
 export { proposals, proposalsRelations } from './proposals.js';
 export { supervisorAssignments, supervisorAssignmentsRelations } from './supervisor-assignments.js';
@@ -18,4 +19,5 @@ export {
   reviewDecisionEnum,
   notificationTypeEnum,
   milestoneStatusEnum,
+  accountTokenTypeEnum,
 } from './enums.js';

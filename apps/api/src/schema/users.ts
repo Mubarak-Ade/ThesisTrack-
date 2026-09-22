@@ -9,7 +9,10 @@ export const users = pgTable(
     email: varchar('email', { length: 255 }).notNull().unique(),
     firstName: varchar('first_name', { length: 255 }).notNull(),
     lastName: varchar('last_name', { length: 255 }).notNull(),
-    passwordHash: text('password_hash').notNull(),
+    // null until an invited user activates their account and sets a password
+    passwordHash: text('password_hash'),
+    // nullable — only students typically have one; null means "not on file"
+    registrationNumber: varchar('registration_number', { length: 32 }),
     role: userRoleEnum('role').notNull().default('student'),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -20,6 +23,7 @@ export const users = pgTable(
 
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
+  accountTokens: many(accountTokens),
   projects: many(projects),
   supervisorAssignments: many(supervisorAssignments),
   submissions: many(submissions),
@@ -30,6 +34,7 @@ export const usersRelations = relations(users, ({ many }) => ({
 }));
 
 import { sessions } from './sessions.js';
+import { accountTokens } from './account-tokens.js';
 import { projects } from './projects.js';
 import { supervisorAssignments } from './supervisor-assignments.js';
 import { submissions } from './submissions.js';

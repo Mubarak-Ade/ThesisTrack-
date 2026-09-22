@@ -18,6 +18,21 @@ export default tseslint.config(
     },
   },
   {
+    rules: {
+      // `declare global { namespace Express { … } }` is the standard
+      // Express module-augmentation pattern — declarations only.
+      '@typescript-eslint/no-namespace': ['error', { allowDeclarations: true }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+    },
+  },
+  {
     ignores: ['**/dist/**', '**/node_modules/**', '**/drizzle/**'],
   },
 );

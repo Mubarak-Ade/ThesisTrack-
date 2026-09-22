@@ -44,3 +44,5 @@ export const milestoneStatusEnum = pgEnum('milestone_status', [
   'approved',
   'overdue',
 ]);
+
+export const accountTokenTypeEnum = pgEnum('account_token_type', ['activation', 'password_reset']);

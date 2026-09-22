@@ -148,7 +148,7 @@ discriminator so the frontend routes on one field:
   "invitation": {
     "name": "Benjamin S. Thompson",
     "email": "…",
-    "role": "student" | "supervisor" | "admin",
+    "role": "student" | "supervisor" | "administrator",
     "registrationNumber": "UG/2024/RES-0842" | null
   } | null
 }
