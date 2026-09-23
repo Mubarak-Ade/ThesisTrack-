@@ -12,6 +12,7 @@ import { useAuthStore } from '../stores/auth';
  */
 export default function RequireAuth({ children }: { children: ReactNode }) {
   const status = useAuthStore((s) => s.status);
+  const exitTo = useAuthStore((s) => s.exitTo);
   const location = useLocation();
 
   if (status === 'unknown') {
@@ -25,7 +26,7 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
   if (status === 'anonymous') {
     return (
       <Navigate
-        to="/unauthorized"
+        to={exitTo ?? '/unauthorized'}
         state={{ from: `${location.pathname}${location.search}` }}
         replace
       />

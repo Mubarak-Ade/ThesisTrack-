@@ -123,8 +123,14 @@ function redirect(to: string): void {
 
 /** Refresh really failed — the session is gone (spec §3/§6). */
 function handleAuthFailure(): void {
+  // The anonymous guard on a still-mounted protected route races this
+  // redirect (its own /unauthorized would win from a later render). Declare
+  // the target first so both actors land on the same URL — private pages
+  // must show /session-expired, not /unauthorized.
+  const to = isPublicPath(window.location.pathname) ? '/unauthorized' : '/session-expired';
+  useAuthStore.getState().setExitTo(to);
   useAuthStore.getState().clear();
-  redirect(isPublicPath(window.location.pathname) ? '/unauthorized' : '/session-expired');
+  redirect(to);
 }
 
 // ── Boot-time refresh ─────────────────────────────────────────────────

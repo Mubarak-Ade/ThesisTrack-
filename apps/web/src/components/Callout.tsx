@@ -10,6 +10,11 @@ interface CalloutProps {
   title?: string;
   /** Icon override — screens pass e.g. `<CheckCircle2 className="size-4 text-success" />`. */
   icon?: ReactNode;
+  /**
+   * Title transform (default on — most mockups shout: "NEXT STEPS").
+   * Invitation cards use sentence case ("Why did this happen?") — opt out.
+   */
+  uppercase?: boolean;
   children: ReactNode;
   className?: string;
 }
@@ -39,13 +44,26 @@ function defaultIcon(variant: CalloutVariant) {
 }
 
 /** Tinted callout box: icon + uppercase title + body (spec §4). */
-export default function Callout({ variant = 'info', title, icon, children, className }: CalloutProps) {
+export default function Callout({
+  variant = 'info',
+  title,
+  icon,
+  uppercase = true,
+  children,
+  className,
+}: CalloutProps) {
   return (
     <div className={cn('flex gap-3 rounded-lg px-4 py-3 text-left', boxStyle[variant], className)}>
       <span className="mt-0.5 shrink-0">{icon ?? defaultIcon(variant)}</span>
       <div className="min-w-0">
         {title && (
-          <p className={cn('text-xs font-bold uppercase tracking-wide', titleStyle[variant])}>
+          <p
+            className={cn(
+              'text-xs font-bold tracking-wide',
+              uppercase && 'uppercase',
+              titleStyle[variant],
+            )}
+          >
             {title}
           </p>
         )}

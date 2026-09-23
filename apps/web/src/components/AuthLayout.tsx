@@ -38,13 +38,16 @@ function IllustrationCard({
 }) {
   const [failed, setFailed] = useState(false);
   const BadgeIcon = badge === 'danger' ? ShieldAlert : ShieldCheck;
+  // Pages pass root-relative "images/…" paths; nested routes would resolve
+  // them against the current URL (/forgot-password/images/…), so pin to root.
+  const resolvedSrc = src.startsWith('/') ? src : `/${src}`;
 
   return (
     <div className="relative">
       <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-primary/15 via-surface-alt to-primary/5 shadow-lg ring-1 ring-black/5">
         {!failed ? (
           <img
-            src={src}
+            src={resolvedSrc}
             alt={alt}
             onError={() => setFailed(true)}
             className="aspect-[4/3] w-full object-cover"

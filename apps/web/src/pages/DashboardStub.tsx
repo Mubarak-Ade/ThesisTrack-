@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
-import { api } from '../lib/http';
+import { ApiError, api } from '../lib/http';
 import { useAuthStore } from '../stores/auth';
 
 /**
@@ -14,9 +14,17 @@ export default function DashboardStub() {
   const signOut = async () => {
     try {
       await api.post('/auth/logout');
-    } catch {
+    } catch (error) {
+      // The interceptor already turned 401/403 into their own redirect —
+      // falling through to clear()+navigate would race it (the anonymous
+      // route guard redirects to /unauthorized and wins).
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return;
       // The cookie may already be gone — local sign-out still proceeds.
     }
+    // The anonymous guard on this route races the redirect below (its
+    // <Navigate> fires in a later render than this call). Declaring the exit
+    // target first makes both actors land on /login, whichever wins.
+    useAuthStore.getState().setExitTo('/login');
     useAuthStore.getState().clear();
     navigate('/login', { replace: true });
   };

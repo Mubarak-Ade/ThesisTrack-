@@ -12,6 +12,8 @@ interface StatusLayoutProps {
   imageAlt?: string;
   /** Circular badge overlapping the image's bottom-right corner. */
   badge?: 'success' | 'danger';
+  /** Badge icon override (invalid-invitation uses EyeOff). */
+  badgeIcon?: ReactNode;
   /** Label between the image and the heading (mockup pills / eyebrows). */
   eyebrow?: ReactNode;
   /** Serif heading — the mockups' status screens use the display face. */
@@ -19,16 +21,29 @@ interface StatusLayoutProps {
   subcopy?: string;
 }
 
-function StatusImage({ src, alt, badge }: { src: string; alt: string; badge?: 'success' | 'danger' }) {
+function StatusImage({
+  src,
+  alt,
+  badge,
+  badgeIcon,
+}: {
+  src: string;
+  alt: string;
+  badge?: 'success' | 'danger';
+  /** Icon override — the invalid-invitation mockup shows an eye-off badge. */
+  badgeIcon?: ReactNode;
+}) {
   const [failed, setFailed] = useState(false);
-  const BadgeIcon = badge === 'danger' ? XCircle : CheckCircle2;
+  const DefaultIcon = badge === 'danger' ? XCircle : CheckCircle2;
+  // Root-relative pin — see AuthLayout.IllustrationCard (nested-route bug).
+  const resolvedSrc = src.startsWith('/') ? src : `/${src}`;
 
   return (
     <div className="relative w-52 md:w-56">
       <div className="overflow-hidden rounded-xl bg-gradient-to-br from-primary/15 via-surface-alt to-primary/5 shadow-md ring-1 ring-black/5">
         {!failed ? (
           <img
-            src={src}
+            src={resolvedSrc}
             alt={alt}
             onError={() => setFailed(true)}
             className="aspect-square w-full object-cover"
@@ -44,7 +59,7 @@ function StatusImage({ src, alt, badge }: { src: string; alt: string; badge?: 's
             badge === 'danger' ? 'bg-danger' : 'bg-primary',
           )}
         >
-          <BadgeIcon className="size-5" aria-hidden="true" />
+          {badgeIcon ?? <DefaultIcon className="size-5" aria-hidden="true" />}
         </span>
       )}
     </div>
@@ -61,6 +76,7 @@ export default function StatusLayout({
   image,
   imageAlt = '',
   badge,
+  badgeIcon,
   eyebrow,
   title,
   subcopy,
@@ -68,7 +84,7 @@ export default function StatusLayout({
   return (
     <AuthLayout {...(left ?? {})}>
       <div className="flex flex-col items-center text-center">
-        {image && <StatusImage src={image} alt={imageAlt} badge={badge} />}
+        {image && <StatusImage src={image} alt={imageAlt} badge={badge} badgeIcon={badgeIcon} />}
         {eyebrow && <div className="mt-6">{eyebrow}</div>}
 
         <h2 className="mt-6 font-display text-3xl font-semibold text-foreground md:text-4xl">

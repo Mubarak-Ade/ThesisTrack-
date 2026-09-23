@@ -13,7 +13,7 @@ const user: PublicUser = {
 };
 
 beforeEach(() => {
-  useAuthStore.setState({ user: null, accessToken: null, status: 'unknown' });
+  useAuthStore.setState({ user: null, accessToken: null, status: 'unknown', exitTo: null });
 });
 
 describe('auth store', () => {
