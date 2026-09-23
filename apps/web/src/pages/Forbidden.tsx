@@ -45,7 +45,9 @@ function Forbidden() {
         </span>
       </Callout>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
+      {/* Row only at lg+: between md (split column starts) and lg the right
+          column is too narrow for two nowrap labels side by side. */}
+      <div className="flex flex-col gap-3 lg:flex-row">
         <Button className="flex-1" asChild>
           <Link to="/dashboard">
             <Home aria-hidden="true" /> GO TO DASHBOARD
