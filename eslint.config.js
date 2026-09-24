@@ -18,6 +18,57 @@ export default tseslint.config(
     },
   },
   {
+    // Feature isolation: features import own-feature code relatively, so any
+    // absolute `@/features/…` here is cross-feature. Features never use pages.
+    files: ['apps/web/src/features/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/features', '@/features/*', '@/features/**'],
+              message: 'Import own-feature code relatively; no cross-feature imports.',
+            },
+            {
+              group: ['@/pages', '@/pages/*', '@/pages/**'],
+              message: 'Features must not import pages.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // Shared layers stay app-agnostic: lib/ and components/ never depend on
+    // features, the app shell, or pages.
+    files: [
+      'apps/web/src/lib/**/*.{ts,tsx}',
+      'apps/web/src/components/**/*.{ts,tsx}',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/features', '@/features/*', '@/features/**'],
+              message: 'Shared layers must not import features.',
+            },
+            {
+              group: ['@/app', '@/app/*', '@/app/**'],
+              message: 'Shared layers must not import app.',
+            },
+            {
+              group: ['@/pages', '@/pages/*', '@/pages/**'],
+              message: 'Shared layers must not import pages.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     rules: {
       // `declare global { namespace Express { … } }` is the standard
       // Express module-augmentation pattern — declarations only.

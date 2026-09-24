@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PublicUser } from '../lib/http';
+import type { PublicUser } from '@/lib/api/http';
 
 export type AuthStatus = 'unknown' | 'anonymous' | 'authenticated';
 

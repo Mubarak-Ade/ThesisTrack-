@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useAuthStore } from './auth';
-import type { PublicUser } from '../lib/http';
+import type { PublicUser } from '@/lib/api/http';
 
 const user: PublicUser = {
   id: 'u-1',

@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
-import { ApiError, api } from '../lib/http';
+import { ApiError, api } from '@/lib/api/http';
 import { useAuthStore } from '../stores/auth';
 
 /**
