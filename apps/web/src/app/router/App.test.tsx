@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 import App from './App';
@@ -85,15 +85,21 @@ describe('routing (spec §3)', () => {
     client.defaults.adapter = originalAdapter;
   });
 
-  it('/dashboard with a session → stub shows the real user name', async () => {
+  it('/dashboard with a session → console shell renders for the real user', async () => {
     installAdapter(authorized);
 
     renderAt('/dashboard');
 
+    // Coordinator Dashboard heading (screen) + real name (sidebar footer).
     await waitFor(() =>
-      expect(screen.getByText('Signed in as Benjamin S. Thompson')).toBeTruthy(),
+      expect(screen.getByRole('heading', { name: 'Coordinator Dashboard' })).toBeTruthy(),
     );
-    expect(screen.getByText('benjamin.thompson@university.edu')).toBeTruthy();
+    expect(screen.getByText('Benjamin S. Thompson')).toBeTruthy();
+    const sidebar = document.querySelector('aside[aria-label="Sidebar"]');
+    expect(sidebar).toBeTruthy();
+    // Scoped to the sidebar: the workspace table has its own "Student" header.
+    expect(within(sidebar as HTMLElement).getByText('Student')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sign Out' })).toBeTruthy();
 
     client.defaults.adapter = originalAdapter;
   });

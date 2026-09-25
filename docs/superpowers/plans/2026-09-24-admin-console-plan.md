@@ -207,7 +207,30 @@ entries; full gate + all harnesses green.
 
 ## Appendix §A — Pinned API contract
 
-(Filled in during Phase 0.1 from the current, possibly uncommitted,
-`apps/api/src/modules/users/schema.ts` + `controller.ts` + `service.ts`:
-create fields, import payload, list envelope, detail fields, role enum,
-invite response, error envelope.)
+(Pinned 2026-09-24 from current `apps/api/src/modules/users/{schema,controller,service}.ts`.)
+
+- **Roles:** `['student','supervisor','administrator']` (`lib/roles.ts`).
+- **Create** `POST /users` body: `{ firstName, lastName, email, role? }`
+  (role defaults `student`; **no** department/registrationNumber on create).
+  Response 201 (200 if `reinvited`): `{ user: PublicUser, status,
+  activationExpiresAt, reinvited, activationToken? (dev) }`.
+  **`provisionUser` auto-issues the invitation on every create** — Phase 5
+  does NOT call `/users/:id/invite` after create; the "Send Invitation Email"
+  toggle only changes the success copy ("Invitation sent to …" vs "Account
+  created (INVITED)"). `POST /users/:id/invite` = re-send (profile Reset
+  Password uses it).
+- **List** `GET /users?page&limit&q&role&isActive` (`page≥1`, `limit 1–100`
+  default 20; `isActive` exact `'true'|'false'`) →
+  `{ users: PublicUser[], pagination: { page, limit, total } }`.
+- **Detail** `GET /users/:userId` (uuid param) → `{ user: PublicUser }`.
+- **PublicUser:** `{ id: uuid, email, firstName, lastName, role, isActive,
+  createdAt, registrationNumber: string|null, status: 'ACTIVE'|'INVITED'|(
+  derived) }` — mappers still read defensively.
+- **Update** `PATCH /users/:id` partial: `{ firstName?, lastName?, role?,
+  isActive?, registrationNumber?|null }` → `{ user }`.
+- **Invite (re-send)** `POST /users/:id/invite` → 200 `{ user, status,
+  activationExpiresAt, activationToken? (dev) }`.
+- **Import** `POST /users/import` body `{ users: [CreateUserInput ×1..500] }`
+  → 201 `{ created, users, invitations? (dev) }`; 422 = all-or-nothing, bad
+  rows listed in the error envelope (`error.details` — surface as row errors).
+- **Errors:** envelope `{ success:false, error:{ code, message, details? } }`.

@@ -82,7 +82,10 @@ describe('login (plan 4.1)', () => {
     fillCredentials();
     fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
 
-    await waitFor(() => expect(screen.getByText('Signed in as Benjamin S. Thompson')).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Coordinator Dashboard' })).toBeTruthy(),
+    );
+    expect(screen.getByText('Benjamin S. Thompson')).toBeTruthy(); // sidebar footer
     expect(useAuthStore.getState().status).toBe('authenticated');
     expect(useAuthStore.getState().accessToken).toBe('tok');
 

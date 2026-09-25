@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import InviteTokenGuard from '@/features/auth/components/InviteTokenGuard';
 import RequireAuth from './RequireAuth';
-import DashboardStub from '@/pages/DashboardStub';
+import ConsoleLayout from '@/app/layouts/ConsoleLayout';
 import Forbidden from '@/features/auth/screens/Forbidden';
 import ForgotPassword from '@/features/auth/screens/ForgotPassword';
 import Home from '@/pages/Home';
@@ -17,20 +17,32 @@ import PasswordResetSuccess from '@/features/auth/screens/PasswordResetSuccess';
 import ResetPassword from '@/features/auth/screens/ResetPassword';
 import SessionExpired from '@/features/auth/screens/SessionExpired';
 import Unauthorized from '@/features/auth/screens/Unauthorized';
+import CoordinatorDashboard from '@/features/dashboard/screens/CoordinatorDashboard';
+import UserCreate from '@/features/users/screens/UserCreate';
+import UserImport from '@/features/users/screens/UserImport';
+import UserList from '@/features/users/screens/UserList';
+import UserProfile from '@/features/users/screens/UserProfile';
 
 /** All 16 paths from spec §3. Invite forms are token-gated. */
 function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
+
+      {/* Admin console (spec §2): shell + five screens; static before :userId. */}
       <Route
-        path="/dashboard"
         element={
           <RequireAuth>
-            <DashboardStub />
+            <ConsoleLayout />
           </RequireAuth>
         }
-      />
+      >
+        <Route path="/dashboard" element={<CoordinatorDashboard />} />
+        <Route path="/users" element={<UserList />} />
+        <Route path="/users/new" element={<UserCreate />} />
+        <Route path="/users/import" element={<UserImport />} />
+        <Route path="/users/:userId" element={<UserProfile />} />
+      </Route>
 
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
