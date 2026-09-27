@@ -3,90 +3,74 @@ import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { downloadCsv } from '@/lib/csv';
-import type { WorkspaceRow } from '../data/types';
+import { useAuthStore } from '@/stores/auth';
+import type { QuickAction, WorkspaceRow } from '../data/types';
+import { exportWorkspaceCsv } from '../lib/exportWorkspace';
 
-interface Action {
-  label: string;
-  hint: string;
-  icon: typeof UserPlus;
-  /** Internal destination, or a client-side action. */
-  to?: string;
-  onClick?: () => void;
-}
+const ICONS = [UserPlus, Users, FolderOpen, FileDown] as const;
 
-export default function QuickActions({ workspace }: { workspace: WorkspaceRow[] }) {
-  const generateReport = () =>
-    downloadCsv(
-      'thesistrack-workspace-report.csv',
-      ['Student', 'Code', 'Project', 'Phase', 'Status', 'Supervisor', 'Updated'],
-      workspace.map((row) => [
-        row.student,
-        row.code,
-        row.project,
-        row.phase,
-        row.status,
-        row.supervisor,
-        row.updated,
-      ]),
-    );
-
-  const actions: Action[] = [
-    { label: 'Add User', hint: 'Provision an account', icon: UserPlus, to: '/users/new' },
-    { label: 'Assign Students', hint: 'Match supervisors', icon: Users, to: '/users' },
-    { label: 'View Projects', hint: 'Browse the directory', icon: FolderOpen, to: '/users' },
-    { label: 'Generate Report', hint: 'Download workspace CSV', icon: FileDown, onClick: generateReport },
-  ];
+export default function QuickActions({
+  actions,
+  workspace,
+}: {
+  actions: QuickAction[];
+  workspace: WorkspaceRow[];
+}) {
+  const name = useAuthStore((s) => s.user);
+  const sessionLabel = name ? `${name.firstName} ${name.lastName}` : 'Signed in';
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardContent className="p-5 sm:p-6">
-        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Shortcuts</p>
-        <h2 className="mt-1 font-display text-lg font-bold text-foreground sm:text-xl">
-          Quick Actions
-        </h2>
+        <h2 className="font-display text-lg font-bold text-foreground sm:text-xl">Quick Actions</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Administrative workflows</p>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {actions.map((action) => {
-            const Icon = action.icon;
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {actions.map((action, index) => {
+            const Icon = ICONS[index] ?? ArrowRight;
             const tile = (
               <>
                 <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
                   <Icon className="size-5" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-foreground">
+                  <span className="block text-sm font-semibold leading-tight text-foreground">
                     {action.label}
                   </span>
                   <span className="block text-xs leading-snug text-muted-foreground">{action.hint}</span>
                 </span>
-                <ArrowRight
-                  className="ml-auto size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
-                  aria-hidden="true"
-                />
               </>
             );
 
-            return action.to ? (
+            if (action.csv) {
+              return (
+                <Button
+                  key={action.label}
+                  type="button"
+                  variant="outline"
+                  onClick={() => exportWorkspaceCsv(workspace)}
+                  className="group h-auto w-full justify-start gap-3 rounded-xl p-3.5 text-left"
+                >
+                  {tile}
+                </Button>
+              );
+            }
+            return (
               <Link
                 key={action.label}
-                to={action.to}
+                to={action.to ?? '/dashboard'}
                 className="group flex items-center gap-3 rounded-xl border border-border bg-background p-3.5 transition-colors hover:border-primary/40 hover:bg-surface-alt/60"
               >
                 {tile}
               </Link>
-            ) : (
-              <Button
-                key={action.label}
-                type="button"
-                variant="outline"
-                onClick={action.onClick}
-                className="group h-auto w-full justify-start gap-3 rounded-xl p-3.5 text-left"
-              >
-                {tile}
-              </Button>
             );
           })}
+        </div>
+
+        {/* Inner session strip (spec §5.1) — real name, static dept + version. */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface-alt/60 px-3 py-2 text-xs text-muted-foreground">
+          <span>Session: {sessionLabel} (Informatics)</span>
+          <span className="font-medium">v1.2.4-stable</span>
         </div>
       </CardContent>
     </Card>

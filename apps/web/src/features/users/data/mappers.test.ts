@@ -28,6 +28,7 @@ describe('mapUserDto', () => {
     const user = mapUserDto(FULL_USER);
     expect(user).toEqual({
       id: FULL_USER.id,
+      code: 'USR-1111',
       firstName: 'Anita',
       lastName: 'Desai',
       email: 'a.desai@student.edu',
@@ -37,6 +38,16 @@ describe('mapUserDto', () => {
       createdAt: '2024-01-22T09:00:00.000Z',
       registrationNumber: 'STU-2024-0117',
     });
+  });
+
+  it('passes a fixture-provided code through unchanged', () => {
+    expect(mapUserDto({ ...FULL_USER, code: 'USR-8821' }).code).toBe('USR-8821');
+  });
+
+  it('derives USR-XXXX from the id, falling back to the id when malformed', () => {
+    expect(mapUserDto(FULL_USER).code).toBe('USR-1111');
+    expect(mapUserDto({ id: 'abc', email: 'x@y.edu' }).code).toBe('abc');
+    expect(mapUserDto({ email: 'x@y.edu' }).code).toBe('');
   });
 
   it('ignores unknown fields', () => {

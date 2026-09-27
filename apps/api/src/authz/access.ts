@@ -1,6 +1,6 @@
 import type { AuthUser } from '../middleware/auth.js';
-import { findActiveAssignment } from '../services/assignments.js';
-import type { ProjectRow } from '../services/projects.js';
+import { getActiveAssignment } from '../modules/supervisor-assignments/service.js';
+import type { ProjectRow } from '../modules/projects/types.js';
 
 export type ProjectAccess = 'owner' | 'supervisor' | 'admin';
 
@@ -25,6 +25,6 @@ export async function getProjectAccess(
     return 'owner';
   }
 
-  const assignment = await findActiveAssignment(project.id, user.id);
+  const assignment = await getActiveAssignment(project.id, user.id);
   return assignment ? 'supervisor' : null;
 }

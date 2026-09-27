@@ -15,15 +15,16 @@ const renderCreate = () =>
     <MemoryRouter initialEntries={['/users/new']}>
       <Routes>
         <Route path="/users/new" element={<UserCreate />} />
+        <Route path="/users" element={<div>Users list</div>} />
         <Route path="/users/:userId" element={<div>Profile loaded</div>} />
       </Routes>
     </MemoryRouter>,
   );
 
 function fillIdentity() {
-  fireEvent.change(screen.getByLabelText('First name'), { target: { value: 'Console' } });
-  fireEvent.change(screen.getByLabelText('Last name'), { target: { value: 'E2E' } });
-  fireEvent.change(screen.getByLabelText('Institutional email address'), {
+  fireEvent.change(screen.getByLabelText('First Name'), { target: { value: 'Console' } });
+  fireEvent.change(screen.getByLabelText('Last Name'), { target: { value: 'E2E' } });
+  fireEvent.change(screen.getByLabelText('Institutional Email'), {
     target: { value: 'console-e2e@test.local' },
   });
 }
@@ -36,28 +37,53 @@ describe('UserCreate (plan 5)', () => {
   it('shows validation messages on an empty submit and never calls the API', async () => {
     renderCreate();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+    // Bottom submit button (top Add User shares the same handler).
+    fireEvent.click(screen.getByRole('button', { name: 'Create User Profile' }));
 
     expect(await screen.findByText('First name is required')).toBeInTheDocument();
     expect(screen.getByText('Last name is required')).toBeInTheDocument();
-    expect(screen.getByText('Email is required')).toBeInTheDocument();
+    expect(await screen.findByText('Email is required')).toBeInTheDocument();
     expect(screen.getByText('Select a role')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add User' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Discard Changes' })).toBeInTheDocument();
     expect(createUser).not.toHaveBeenCalled();
+  });
+
+  it('default-checks both onboarding checkbox cards (spec §5.3)', async () => {
+    renderCreate();
+
+    const invite = screen.getByRole('checkbox', {
+      name: /send invitation email immediately/i,
+    });
+    const enforce = screen.getByRole('checkbox', {
+      name: /enforce immediate password change/i,
+    });
+    expect(invite).toBeChecked();
+    expect(enforce).toBeChecked();
+
+    fireEvent.click(enforce);
+    expect(enforce).not.toBeChecked();
   });
 
   it('updates the Account Preview as fields change', async () => {
     renderCreate();
 
-    // Empty state placeholders first (name + role both show "Not Selected").
+    // Empty-state placeholders: name + department, email + enrollment ID.
     expect((await screen.findAllByText('Not Selected')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('TBD').length).toBeGreaterThan(0);
+    expect(screen.getByText('Unassigned Role')).toBeInTheDocument();
 
     fillIdentity();
-    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'student' } });
+    fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
+    fireEvent.change(screen.getByLabelText('Academic Department'), {
+      target: { value: 'Informatics' },
+    });
 
     expect(await screen.findByText('Console E2E')).toBeInTheDocument();
     expect(screen.getByText('console-e2e@test.local')).toBeInTheDocument();
     expect(screen.getByText('student')).toBeInTheDocument(); // role badge (CSS-uppercased)
-    expect(screen.queryByText('Not Selected')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Informatics').length).toBeGreaterThan(0); // option + preview row
+    expect(screen.queryByText('Unassigned Role')).not.toBeInTheDocument();
   });
 
   it('submits the mapped payload, shows success copy and navigates to the profile', async () => {
@@ -79,10 +105,11 @@ describe('UserCreate (plan 5)', () => {
 
     renderCreate();
     fillIdentity();
-    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'student' } });
-    fireEvent.change(screen.getByLabelText('Department'), { target: { value: 'Informatics' } });
+    fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
+    fireEvent.change(screen.getByLabelText('Academic Department'), { target: { value: 'Informatics' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+    // Top submit button this time (Add User).
+    fireEvent.click(screen.getByRole('button', { name: 'Add User' }));
 
     // Repo receives the console input (UI-only department; repo drops it for §A).
     await waitFor(() => expect(createUser).toHaveBeenCalledTimes(1));
@@ -105,8 +132,8 @@ describe('UserCreate (plan 5)', () => {
 
     renderCreate();
     fillIdentity();
-    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'student' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+    fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create User Profile' }));
 
     // Non-ApiError path renders the connection fallback copy.
     expect(

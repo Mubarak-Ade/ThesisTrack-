@@ -56,19 +56,32 @@ export async function deleteExpiredSessions(): Promise<void> {
 
 // ── Account tokens (table: account_tokens) ────────────────────────────
 
-export async function deleteAccountTokens(userId: string, type: AccountTokenType): Promise<void> {
-  await db
+/**
+ * Optional executor lets callers run these inside a transaction (the bulk
+ * import inserts users + activation tokens atomically).
+ */
+export type TokenExecutor = Pick<typeof db, 'insert' | 'delete'>;
+
+export async function deleteAccountTokens(
+  userId: string,
+  type: AccountTokenType,
+  executor: TokenExecutor = db,
+): Promise<void> {
+  await executor
     .delete(accountTokens)
     .where(and(eq(accountTokens.userId, userId), eq(accountTokens.type, type)));
 }
 
-export async function insertAccountToken(values: {
-  userId: string;
-  type: AccountTokenType;
-  tokenHash: string;
-  expiresAt: Date;
-}): Promise<void> {
-  await db.insert(accountTokens).values(values);
+export async function insertAccountToken(
+  values: {
+    userId: string;
+    type: AccountTokenType;
+    tokenHash: string;
+    expiresAt: Date;
+  },
+  executor: TokenExecutor = db,
+): Promise<void> {
+  await executor.insert(accountTokens).values(values);
 }
 
 export async function findAccountTokenByHash(tokenHash: string) {

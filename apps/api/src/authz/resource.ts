@@ -1,8 +1,9 @@
 import { Request, RequestHandler } from 'express';
 import { AuthorizationError, NotFoundError } from '../errors/index.js';
 import { asyncHandler } from '../lib/async-handler.js';
-import { findProjectById, ProjectRow, isValidUuid } from '../services/projects.js';
-import { findActiveAssignment } from '../services/assignments.js';
+import { getProjectById } from '../modules/projects/service.js';
+import { getActiveAssignment } from '../modules/supervisor-assignments/service.js';
+import type { ProjectRow } from '../modules/projects/types.js';
 import { getProjectAccess } from './access.js';
 import { requireUser } from './guards.js';
 
@@ -28,7 +29,7 @@ async function loadProject(req: Request, param: string): Promise<ProjectRow> {
 
   const raw = req.params[param];
   const id = typeof raw === 'string' ? raw : undefined;
-  const project = id && isValidUuid(id) ? await findProjectById(id) : undefined;
+  const project = id ? await getProjectById(id) : undefined;
   if (!project) {
     throw new NotFoundError('Project');
   }
@@ -65,7 +66,7 @@ export function requireSupervisorAssignment(options: ProjectGuardOptions = {}): 
     const user = requireUser(req);
     const project = await loadProject(req, param);
 
-    const assignment = await findActiveAssignment(project.id, user.id);
+    const assignment = await getActiveAssignment(project.id, user.id);
     if (!assignment) {
       throw new AuthorizationError('You are not assigned to supervise this project');
     }

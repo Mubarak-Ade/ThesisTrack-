@@ -1,6 +1,8 @@
-import { Building2, Mail, MapPin, Phone, Languages } from 'lucide-react';
+import { CalendarDays, Languages, Mail, MapPin, MessageSquare, Phone } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { toast } from 'sonner';
 import type { UserDetail } from '../data/types';
 
 interface Row {
@@ -9,18 +11,23 @@ interface Row {
   icon: typeof Mail;
 }
 
+/** Live `createdAt` → "Sep 12, 2023"; missing/invalid → em-dash (spec §5.4). */
+function formatDate(iso: string | null): string {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 /** Contact Information — live core fields over fixture extras (spec §5.4). */
 export default function ContactCard({ detail }: { detail: UserDetail }) {
   const rows: Row[] = [
     { label: 'Email', value: detail.email, icon: Mail },
-    {
-      label: 'Department',
-      value: detail.extras.department ?? detail.department ?? '—',
-      icon: Building2,
-    },
     { label: 'Phone', value: detail.extras.phone ?? '—', icon: Phone },
-    { label: 'Address', value: detail.extras.address ?? '—', icon: MapPin },
-    { label: 'Portal language', value: detail.extras.portalLanguage ?? '—', icon: Languages },
+    { label: 'Office/Address', value: detail.extras.address ?? '—', icon: MapPin },
+    { label: 'Portal Language', value: detail.extras.portalLanguage ?? '—', icon: Languages },
+    // Live field — always from the API (spec §5.4).
+    { label: 'Member Since', value: formatDate(detail.createdAt), icon: CalendarDays },
   ];
 
   return (
@@ -52,6 +59,16 @@ export default function ContactCard({ detail }: { detail: UserDetail }) {
             );
           })}
         </dl>
+
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-4 w-full"
+          onClick={() => toast.info('Direct messages are not available yet')}
+        >
+          <MessageSquare aria-hidden="true" />
+          Send Direct Message
+        </Button>
       </CardContent>
     </Card>
   );

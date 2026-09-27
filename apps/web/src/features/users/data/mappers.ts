@@ -43,12 +43,25 @@ function asRole(value: unknown): Role {
   return (ROLES as readonly string[]).includes(str(value)) ? (value as Role) : 'student';
 }
 
+/**
+ * Display code (spec §4, mockup parity): fixture-provided codes pass through;
+ * live rows derive `USR-` + first 4 hex chars of the id. Malformed/short ids
+ * fall back to the id itself (never invented data).
+ */
+function asCode(id: string, given: unknown): string {
+  if (typeof given === 'string' && given.length > 0) return given;
+  const cleaned = id.replace(/-/g, '');
+  return cleaned.length >= 4 ? `USR-${cleaned.slice(0, 4).toUpperCase()}` : id;
+}
+
 /** PublicUser → ConsoleUser. Defensive at field level (§A shape). */
 export function mapUserDto(value: unknown): ConsoleUser {
   const r = asRecord(value);
   const isActive = typeof r.isActive === 'boolean' ? r.isActive : false;
+  const id = str(r.id);
   return {
-    id: str(r.id),
+    id,
+    code: asCode(id, r.code),
     firstName: str(r.firstName),
     lastName: str(r.lastName),
     email: str(r.email),

@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Mail, Rocket, ShieldCheck, UserRound, X } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -12,7 +12,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiError } from '@/lib/api/http';
 import AccountPreview from '../components/AccountPreview';
-import Toggle from '../components/Toggle';
 import { DEPARTMENTS, ROLES } from '../data/constants';
 import type { Role } from '../data/types';
 import { createUser } from '../data/usersRepo';
@@ -43,17 +42,39 @@ const createSchema = z.object({
 
 type CreateForm = z.infer<typeof createSchema>;
 
-const ROLE_HELP: Record<Role, string> = {
-  student: 'Students submit theses, upload drafts and track their own progress.',
-  supervisor: 'Supervisors review assigned theses, leave feedback and approve milestones.',
-  administrator: 'Administrators manage every account, setting and report in the console.',
-};
-
 const LABEL_CLASS =
   'text-xs font-semibold uppercase tracking-wider text-muted-foreground';
 
 const SELECT_CLASS =
   'flex h-11 w-full rounded-md border border-input bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1';
+
+/** Icon + bold title + uppercase kicker beneath + hairline rule (spec §5.3). */
+function SectionHead({
+  icon: Icon,
+  title,
+  kicker,
+}: {
+  icon: typeof UserRound;
+  title: string;
+  kicker: string;
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="font-display text-lg font-bold text-foreground">{title}</h2>
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+            {kicker}
+          </p>
+        </div>
+      </div>
+      <hr className="mt-4 border-border" />
+    </>
+  );
+}
 
 /** Create User Account (spec §5.3) — live `POST /users` write, UI-only extras. */
 export default function UserCreate() {
@@ -67,8 +88,9 @@ export default function UserCreate() {
       email: '',
       role: '',
       department: '',
+      // Both onboarding cards default-checked (spec §5.3).
       sendInvite: true,
-      enforcePasswordChange: false,
+      enforcePasswordChange: true,
     },
   });
 
@@ -113,52 +135,69 @@ export default function UserCreate() {
 
   return (
     <div className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
-      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Link to="/" className="transition-colors hover:text-primary">
-          Home
-        </Link>
-        <span aria-hidden="true">/</span>
+      {/* Breadcrumb (spec §3): USER MANAGEMENT › ADD NEW USER */}
+      <nav
+        aria-label="Breadcrumb"
+        className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+      >
         <Link to="/users" className="transition-colors hover:text-primary">
-          Users
+          User Management
         </Link>
-        <span aria-hidden="true">/</span>
-        <span className="font-medium text-foreground">New</span>
+        <span aria-hidden="true">›</span>
+        <span className="text-foreground">Add New User</span>
       </nav>
 
-      <div className="mt-2">
-        <p className="text-xs font-bold uppercase tracking-widest text-primary">User Management</p>
-        <h1 className="mt-1 font-display text-2xl font-bold text-foreground sm:text-3xl">
-          Create User Account
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Provision a new directory account. The invited user sets their own password during
-          activation.
-        </p>
-      </div>
+      <form onSubmit={onSubmit} noValidate>
+        <header className="mt-3 flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <Link
+              to="/users"
+              aria-label="Back to All Users"
+              className="grid size-10 shrink-0 place-items-center rounded-full border border-input bg-white text-foreground shadow-sm transition-colors hover:bg-accent"
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" />
+            </Link>
+            <div>
+              <h1 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
+                Create User Account
+              </h1>
+              <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">
+                Register new students, faculty, or staff into the ThesisTrack portal.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" disabled={pending} onClick={() => navigate('/users')}>
+              <X aria-hidden="true" />
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending}>
+              Add User
+            </Button>
+          </div>
+        </header>
 
-      <form onSubmit={onSubmit} noValidate className="mt-6">
         {errors.root && (
-          <div className="mb-4">
+          <div className="mt-4">
             <FormMessage>{errors.root.message}</FormMessage>
           </div>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="mt-6 grid gap-4 lg:grid-cols-3">
           {/* ── Form column ─────────────────────────────────────────── */}
           <div className="space-y-4 lg:col-span-2">
             <Card>
               <CardContent className="p-5 sm:p-6">
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                  Profile
-                </p>
-                <h2 className="mt-1 font-display text-lg font-bold text-foreground">
-                  Identity &amp; Contact
-                </h2>
+                <SectionHead
+                  icon={UserRound}
+                  title="Identity & Contact"
+                  kicker="Basic Organizational Information"
+                />
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="uc-first" className={LABEL_CLASS}>
-                      First name
+                      First Name
                     </Label>
                     <Input
                       id="uc-first"
@@ -172,7 +211,7 @@ export default function UserCreate() {
 
                   <div className="space-y-2">
                     <Label htmlFor="uc-last" className={LABEL_CLASS}>
-                      Last name
+                      Last Name
                     </Label>
                     <Input
                       id="uc-last"
@@ -186,16 +225,27 @@ export default function UserCreate() {
 
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="uc-email" className={LABEL_CLASS}>
-                      Institutional email address
+                      Institutional Email
                     </Label>
-                    <Input
-                      id="uc-email"
-                      type="email"
-                      autoComplete="email"
-                      placeholder="e.g. m.holloway@student.edu"
-                      aria-invalid={!!errors.email}
-                      {...form.register('email')}
-                    />
+                    {/* Envelope prefix (spec §5.3). */}
+                    <div className="relative">
+                      <Mail
+                        className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      <Input
+                        id="uc-email"
+                        type="email"
+                        autoComplete="email"
+                        placeholder="e.g. m.holloway@student.edu"
+                        aria-invalid={!!errors.email}
+                        className="pl-9"
+                        {...form.register('email')}
+                      />
+                    </div>
+                    <p className="text-xs italic text-muted-foreground">
+                      Verification email and portal invitation will be sent to this address.
+                    </p>
                     {fieldError('email')}
                   </div>
                 </div>
@@ -204,17 +254,16 @@ export default function UserCreate() {
 
             <Card>
               <CardContent className="p-5 sm:p-6">
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                  Access
-                </p>
-                <h2 className="mt-1 font-display text-lg font-bold text-foreground">
-                  Role &amp; Permissions
-                </h2>
+                <SectionHead
+                  icon={ShieldCheck}
+                  title="Role & Permissions"
+                  kicker="System Access Configuration"
+                />
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="uc-role" className={LABEL_CLASS}>
-                      Role
+                      System Role
                     </Label>
                     <select
                       id="uc-role"
@@ -234,64 +283,88 @@ export default function UserCreate() {
 
                   <div className="space-y-2">
                     <Label htmlFor="uc-department" className={LABEL_CLASS}>
-                      Department
+                      Academic Department
                     </Label>
                     <select id="uc-department" className={SELECT_CLASS} {...form.register('department')}>
-                      <option value="">Not assigned yet (TBD)</option>
+                      <option value="">Not Selected</option>
                       {DEPARTMENTS.map((department) => (
                         <option key={department} value={department}>
                           {department}
                         </option>
                       ))}
                     </select>
-                    <p className="text-xs text-muted-foreground">
-                      No departments endpoint — list is a local constant (spec §4).
-                    </p>
                   </div>
                 </div>
-
-                {watched.role && (
-                  <p className="mt-3 rounded-lg bg-surface-alt px-3 py-2.5 text-sm text-muted-foreground">
-                    {ROLE_HELP[watched.role as Role]}
-                  </p>
-                )}
               </CardContent>
             </Card>
 
             <Card>
               <CardContent className="p-5 sm:p-6">
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                  Setup
-                </p>
-                <h2 className="mt-1 font-display text-lg font-bold text-foreground">
-                  Account Onboarding
-                </h2>
+                <SectionHead
+                  icon={Rocket}
+                  title="Account Onboarding"
+                  kicker="Automation Settings"
+                />
 
-                <div className="mt-4 space-y-4">
-                  <Toggle
-                    checked={watched.sendInvite}
-                    onChange={(checked) => form.setValue('sendInvite', checked)}
-                    label="Send Invitation Email Immediately"
-                    description="Mention the issued invitation in the success confirmation after creation."
-                  />
-                  <Toggle
-                    checked={watched.enforcePasswordChange}
-                    onChange={(checked) => form.setValue('enforcePasswordChange', checked)}
-                    label="Enforce Immediate Password Change"
-                    description="The API has no such flag yet — kept for console parity."
-                    uiOnly
-                  />
+                {/* Native checkbox cards, both default-checked (spec §4/§5.3). */}
+                <div className="mt-4 space-y-3">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-background p-4 transition-colors hover:border-primary/40">
+                    <input
+                      type="checkbox"
+                      checked={watched.sendInvite}
+                      onChange={(event) => form.setValue('sendInvite', event.target.checked)}
+                      className="mt-1 size-4 shrink-0 accent-primary"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-foreground">
+                        Send Invitation Email Immediately
+                      </span>
+                      <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                        User will receive a secure magic link to set their initial password and
+                        access the dashboard.
+                      </span>
+                    </span>
+                  </label>
+
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-background p-4 transition-colors hover:border-primary/40">
+                    <input
+                      type="checkbox"
+                      checked={watched.enforcePasswordChange}
+                      onChange={(event) =>
+                        form.setValue('enforcePasswordChange', event.target.checked)
+                      }
+                      className="mt-1 size-4 shrink-0 accent-primary"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-foreground">
+                        Enforce Immediate Password Change
+                      </span>
+                      <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                        For security, users will be required to update their temporary credentials
+                        upon their first successful login.
+                      </span>
+                    </span>
+                  </label>
                 </div>
               </CardContent>
             </Card>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Button type="submit" disabled={pending} className="sm:min-w-44">
-                {pending ? 'Creating…' : 'Create Account'}
+            {/* Bottom note + actions (spec §5.3) — buttons share the handlers. */}
+            <p className="text-xs italic text-muted-foreground">
+              System logs will record this creation event under Coordinator profile for
+              institutional audit purposes.
+            </p>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={pending}
+                onClick={() => navigate('/users')}
+              >
+                Discard Changes
               </Button>
-              <Button type="button" variant="outline" disabled={pending} onClick={() => navigate('/users')}>
-                <ArrowLeft aria-hidden="true" />
-                Cancel
+              <Button type="submit" disabled={pending} className="sm:min-w-44">
+                Create User Profile
               </Button>
             </div>
           </div>
@@ -305,7 +378,6 @@ export default function UserCreate() {
                 email: watched.email ?? '',
                 role: watched.role ?? '',
                 department: watched.department ?? '',
-                sendInvite: watched.sendInvite ?? true,
               }}
             />
           </div>

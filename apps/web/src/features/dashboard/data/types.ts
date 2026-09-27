@@ -21,12 +21,12 @@ export type WorkspaceStatus = 'IN PROGRESS' | 'PENDING REVIEW' | 'DELAYED' | 'CO
 
 export interface WorkspaceRow {
   student: string;
+  /** Thesis code shown under the name (`TH-2024-001`, spec §5.1). */
   code: string;
   project: string;
   phase: string;
   status: WorkspaceStatus;
   supervisor: string;
-  updated: string;
 }
 
 export type TaskKind = 'UPCOMING' | 'ACTION REQUIRED' | 'OVERDUE';
@@ -38,11 +38,19 @@ export interface TaskItem {
 }
 
 export interface CriticalTask {
-  title: string;
   bodyLead: string;
   dateEm: string;
   bodyTail: string;
   cta: string;
+}
+
+/** Quick-action tile copy (spec §5.1) — routes/CSV live with the screen. */
+export interface QuickAction {
+  label: string;
+  hint: string;
+  /** Internal destination, or a client-side CSV export (exactly one). */
+  to?: string;
+  csv?: boolean;
 }
 
 export interface TaskGroups {
@@ -64,6 +72,9 @@ export interface DashboardData {
   project: ProjectProgress;
   department: DepartmentProgress;
   workspace: WorkspaceRow[];
+  /** Branded directory total for the table footer (spec §5.1). */
+  workspaceTotal: number;
   tasks: TaskGroups;
   activity: DashActivity[];
+  quickActions: QuickAction[];
 }

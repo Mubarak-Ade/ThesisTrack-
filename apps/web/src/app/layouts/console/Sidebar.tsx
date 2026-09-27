@@ -1,7 +1,17 @@
-import { Building2, GraduationCap, LayoutDashboard, LogOut, Settings, UserRound, Users, X } from 'lucide-react';
+import {
+  Building2,
+  ChevronDown,
+  GraduationCap,
+  LayoutDashboard,
+  LogOut,
+  Settings,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ApiError, api } from '@/lib/api/http';
 import { cn } from '@/lib/utils';
@@ -19,12 +29,15 @@ interface NavItem {
   to?: string;
 }
 
-/** Dashboard + Users are real; the rest are out-of-scope placeholders (spec §8). */
+/**
+ * Exactly the mockup's five items (spec §3) — there is no Users entry;
+ * `/users*` is reached via Dashboard links and breadcrumbs (mockup parity).
+ * Departments/Settings stay out-of-scope placeholders (spec §8).
+ */
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' },
-  { label: 'Users', icon: Users, to: '/users' },
-  { label: 'Faculty', icon: GraduationCap },
-  { label: 'Students', icon: UserRound },
+  { label: 'Faculty', icon: GraduationCap, to: '/faculty' },
+  { label: 'Students', icon: UserRound, to: '/students' },
   { label: 'Departments', icon: Building2 },
   { label: 'Settings', icon: Settings },
 ];
@@ -38,9 +51,6 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
 
-  const initials = user
-    ? `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase()
-    : '?';
   const roleTitle = user ? (ROLE_TITLES[user.role] ?? user.role) : '';
 
   const signOut = async () => {
@@ -62,11 +72,11 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
   };
 
   return (
-    <div className="flex h-full flex-col bg-primary text-primary-foreground">
+    <div className="flex h-full flex-col border-r border-border bg-background">
       {/* Brand row — desktop shows the wordmark, the drawer gets a close X. */}
       <div className="flex items-center justify-between gap-2 px-5 py-5">
         <span className="inline-flex items-center gap-2.5">
-          <span className="grid size-9 place-items-center rounded-[10px] bg-white/15">
+          <span className="grid size-9 place-items-center rounded-[10px] bg-primary text-primary-foreground">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -82,22 +92,19 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
               <path d="M12 7c1.8-1.4 4.2-2 7-2v13c-2.8 0-5.2.6-7 2" />
             </svg>
           </span>
-          <span className="text-lg font-bold tracking-tight">ThesisTrack</span>
+          <span className="text-lg font-bold tracking-tight text-foreground">ThesisTrack</span>
         </span>
         <button
           type="button"
           aria-label="Close navigation"
           onClick={onNavigate}
-          className="grid size-9 place-items-center rounded-md text-primary-foreground/80 hover:bg-white/10 hover:text-white lg:hidden"
+          className="grid size-9 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground lg:hidden"
         >
           <X className="size-5" aria-hidden="true" />
         </button>
       </div>
 
       <nav aria-label="Console" className="flex-1 overflow-y-auto px-3 py-2">
-        <p className="px-3 pb-2 text-[11px] font-bold uppercase tracking-widest text-primary-foreground/60">
-          Menu
-        </p>
         <ul className="space-y-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
@@ -109,10 +116,10 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
                     onClick={onNavigate}
                     className={({ isActive }) =>
                       cn(
-                        'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                        'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
                         isActive
-                          ? 'bg-white/15 font-semibold text-white shadow-sm'
-                          : 'text-primary-foreground/75 hover:bg-white/10 hover:text-white',
+                          ? 'bg-primary/10 font-semibold text-primary'
+                          : 'font-medium text-muted-foreground hover:bg-accent hover:text-foreground',
                       )
                     }
                   >
@@ -127,7 +134,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
                 <button
                   type="button"
                   onClick={() => toast.info(`${item.label} is not available yet`)}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-primary-foreground/75 transition-colors hover:bg-white/10 hover:text-white"
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
                   <Icon className="size-4 shrink-0" aria-hidden="true" />
                   {item.label}
@@ -138,23 +145,22 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
         </ul>
       </nav>
 
-      {/* Signed-in user footer (real session data). */}
-      <div className="border-t border-white/15 p-4">
+      {/* Signed-in user footer (real session data) — mockup persona layout. */}
+      <div className="border-t border-border p-4">
         <div className="flex items-center gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white/20 text-sm font-bold">
-            {initials}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">
+          <Avatar size="md" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-foreground">
               {user ? `${user.firstName} ${user.lastName}` : 'Signed in'}
             </p>
-            <p className="truncate text-xs text-primary-foreground/70">{roleTitle}</p>
+            <p className="truncate text-xs text-muted-foreground">{roleTitle}</p>
           </div>
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </div>
         <Button
           type="button"
           onClick={signOut}
-          className="mt-3 w-full justify-start gap-2 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+          className="mt-3 w-full justify-start gap-2 text-red-600 hover:bg-red-500/10 hover:text-red-600"
           variant="ghost"
         >
           <LogOut className="size-4" aria-hidden="true" />

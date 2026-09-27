@@ -25,6 +25,7 @@ import {
   revokeAllSessionsForUser,
   revokeSessionByHashIfActive,
   revokeSessionIfActive,
+  type TokenExecutor,
 } from './repository.js';
 import type {
   AccountTokenType,
@@ -165,23 +166,25 @@ const TTL_SECONDS: Record<AccountTokenType, number> = {
 /**
  * Issues a single-use, hashed account token. Any outstanding token of the
  * same type for that user is invalidated first (latest invitation wins).
+ * Pass an executor to run inside the caller's transaction (bulk import).
  */
 async function issueAccountToken(
   userId: string,
   type: AccountTokenType,
+  executor?: TokenExecutor,
 ): Promise<IssuedAccountToken> {
-  await deleteAccountTokens(userId, type);
+  await deleteAccountTokens(userId, type, executor);
 
   const token = generateToken(32);
   const expiresAt = new Date(Date.now() + TTL_SECONDS[type] * 1000);
 
-  await insertAccountToken({ userId, type, tokenHash: hashToken(token), expiresAt });
+  await insertAccountToken({ userId, type, tokenHash: hashToken(token), expiresAt }, executor);
 
   return { token, expiresAt };
 }
 
-export function issueActivationToken(userId: string): Promise<IssuedAccountToken> {
-  return issueAccountToken(userId, 'activation');
+export function issueActivationToken(userId: string, executor?: TokenExecutor): Promise<IssuedAccountToken> {
+  return issueAccountToken(userId, 'activation', executor);
 }
 
 export function issueResetToken(userId: string): Promise<IssuedAccountToken> {

@@ -81,6 +81,16 @@ describe('UserList (plan 4)', () => {
     expect(await screen.findByText(/m\.holloway@student\.edu/)).toBeInTheDocument();
     expect(screen.getAllByText('Active').length).toBeGreaterThan(0);
 
+    // Spec §5.2 structure: checkbox column, numbered pager, Show control.
+    expect(screen.getByRole('checkbox', { name: /select all users/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('checkbox', { name: /select marcus holloway/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Showing 1–2 of 2 users')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: /pagination/i })).toBeInTheDocument();
+    expect(screen.getByLabelText('Rows per page')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search by name, email, or user ID…')).toBeInTheDocument();
+
     // First fetch uses the default paging args.
     expect(listUsers).toHaveBeenCalledWith({
       q: '',
@@ -89,6 +99,23 @@ describe('UserList (plan 4)', () => {
       page: 1,
       limit: 20,
     });
+  });
+
+  it('shows em-dashes for live rows lacking department / last login', async () => {
+    const LIVE = {
+      ...MARCUS,
+      id: '1e98a7c3-2f11-4b6d-9c0a-55aa77bb88cc',
+      code: 'USR-1E98',
+      department: undefined,
+      lastLoginLabel: undefined,
+    } satisfies ConsoleUser;
+
+    vi.mocked(listUsers).mockResolvedValue(page([LIVE]));
+
+    renderList();
+
+    expect(await screen.findByText('Marcus Holloway')).toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
   });
 
   it('shows the sample-data banner when the repo fell back to fixtures', async () => {

@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { users } from '../schema/index.js';
-import { hashPassword } from '../services/password.js';
+import { hashPassword } from '../modules/auth/service.js';
 
 /**
  * Creates (or repairs) the initial administrator account — the bootstrap

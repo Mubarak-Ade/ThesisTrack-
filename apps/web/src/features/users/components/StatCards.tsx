@@ -9,8 +9,9 @@ interface Tile {
   value: string;
   note: string;
   icon: typeof Zap;
-  tileClass: string;
+  iconClass: string;
   noteClass?: string;
+  valueClass?: string;
 }
 
 /** Four aggregate cards (spec §5.2). Only the total can come live (§4). */
@@ -21,29 +22,30 @@ export default function StatCards({ stats }: { stats: ConsoleStats }) {
       value: stats.total.toLocaleString('en-US'),
       note: stats.usedFallback ? `${stats.totalDelta} (sample)` : stats.totalDelta,
       icon: UsersRound,
-      tileClass: 'bg-primary/10 text-primary',
+      iconClass: 'bg-primary/10 text-primary',
     },
     {
       label: 'Active Students',
       value: stats.students.toLocaleString('en-US'),
       note: stats.engagement,
       icon: UserRound,
-      tileClass: 'bg-success-bg text-success',
+      iconClass: 'bg-success-bg text-success',
     },
     {
       label: 'Faculty Members',
       value: stats.faculty.toLocaleString('en-US'),
       note: stats.facultyNote,
       icon: Zap,
-      tileClass: 'bg-secondary text-secondary-foreground',
+      iconClass: 'bg-secondary text-secondary-foreground',
     },
     {
-      label: 'Security Alerts',
+      label: 'System Alerts',
       value: String(stats.alerts).padStart(2, '0'),
       note: stats.alertsNote,
       icon: ShieldAlert,
-      tileClass: 'bg-danger-bg text-danger',
+      iconClass: 'bg-danger-bg text-danger',
       noteClass: 'text-danger',
+      valueClass: 'text-danger',
     },
   ];
 
@@ -53,19 +55,26 @@ export default function StatCards({ stats }: { stats: ConsoleStats }) {
         const Icon = tile.icon;
         return (
           <Card key={tile.label}>
-            <CardContent className="flex items-start gap-4 p-5">
-              <span className={cn('grid size-11 shrink-0 place-items-center rounded-xl', tile.tileClass)}>
-                <Icon className="size-5" aria-hidden="true" />
-              </span>
-              <div className="min-w-0">
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between gap-3">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   {tile.label}
                 </p>
-                <p className="mt-1 font-display text-2xl font-bold text-foreground">{tile.value}</p>
-                <p className={cn('mt-0.5 text-xs text-muted-foreground', tile.noteClass)}>
-                  {tile.note}
-                </p>
+                <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg', tile.iconClass)}>
+                  <Icon className="size-4" aria-hidden="true" />
+                </span>
               </div>
+              <p
+                className={cn(
+                  'mt-2 font-display text-3xl font-bold text-foreground',
+                  tile.valueClass,
+                )}
+              >
+                {tile.value}
+              </p>
+              <p className={cn('mt-1 text-xs', tile.noteClass ?? 'text-muted-foreground')}>
+                {tile.note}
+              </p>
             </CardContent>
           </Card>
         );

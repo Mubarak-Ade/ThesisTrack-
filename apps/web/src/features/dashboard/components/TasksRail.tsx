@@ -1,35 +1,27 @@
 import { AlertTriangle, Clock, Zap } from 'lucide-react';
-import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import type { CriticalTask, TaskGroups, TaskItem, TaskKind } from '../data/types';
+import { cn } from '@/lib/utils';
+import type { CriticalTask, TaskGroups, TaskItem } from '../data/types';
 
-const GROUP_STYLES: Record<
-  TaskKind,
-  { label: string; chipClass: string; icon: typeof Clock }
-> = {
-  UPCOMING: { label: 'Upcoming', chipClass: 'bg-secondary text-secondary-foreground', icon: Clock },
-  'ACTION REQUIRED': {
-    label: 'Action Required',
-    chipClass: 'bg-primary/10 text-primary',
-    icon: Zap,
-  },
-  OVERDUE: { label: 'Overdue', chipClass: 'bg-danger-bg text-danger', icon: AlertTriangle },
-};
+interface GroupDef {
+  label: string;
+  items: TaskItem[];
+  labelClass: string;
+  icon: typeof Clock;
+}
 
-const GROUP_ORDER: TaskKind[] = ['UPCOMING', 'ACTION REQUIRED', 'OVERDUE'];
-
-function TaskGroup({ kind, items }: { kind: TaskKind; items: TaskItem[] }) {
-  const style = GROUP_STYLES[kind];
-  const Icon = style.icon;
+function TaskGroup({ label, items, labelClass, icon }: GroupDef) {
   if (items.length === 0) return null;
+  const Icon = icon;
   return (
     <div>
-      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${style.chipClass}`}>
+      <p className={cn('flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider', labelClass)}>
         <Icon className="size-3.5" aria-hidden="true" />
-        {style.label}
-      </span>
+        {label}
+      </p>
       <ul className="mt-2 space-y-2">
         {items.map((item) => (
           <li
@@ -46,21 +38,20 @@ function TaskGroup({ kind, items }: { kind: TaskKind; items: TaskItem[] }) {
 }
 
 function CriticalCard({ task }: { task: CriticalTask }) {
+  const navigate = useNavigate();
   return (
-    <div className="rounded-xl border border-danger/30 bg-danger-bg p-4">
-      <p className="text-[11px] font-bold uppercase tracking-widest text-danger">
-        Critical Deadline
-      </p>
-      <p className="mt-1.5 text-sm font-bold text-foreground">{task.title}</p>
-      <p className="mt-1 text-sm leading-relaxed text-foreground/80">
-        {task.bodyLead} <strong className="font-semibold text-danger">{task.dateEm}</strong>{' '}
+    <div className="rounded-xl bg-danger p-4 text-white">
+      <p className="text-sm font-bold">Critical Deadline</p>
+      <p className="mt-1.5 text-sm leading-relaxed text-white/90">
+        {task.bodyLead}
+        <strong className="font-bold text-white">{task.dateEm}</strong>
         {task.bodyTail}
       </p>
       <Button
         type="button"
         size="sm"
-        className="mt-3"
-        onClick={() => toast.info('Deadline review is not available yet')}
+        onClick={() => navigate('/faculty')}
+        className="mt-3 bg-white text-danger hover:bg-white/90 hover:text-danger"
       >
         {task.cta}
       </Button>
@@ -69,24 +60,55 @@ function CriticalCard({ task }: { task: CriticalTask }) {
 }
 
 export default function TasksRail({ tasks }: { tasks: TaskGroups }) {
+  const groups: GroupDef[] = [
+    {
+      label: 'Upcoming',
+      items: tasks.upcoming,
+      labelClass: 'text-muted-foreground',
+      icon: Clock,
+    },
+    {
+      label: 'Action Required',
+      items: tasks.action,
+      labelClass: 'text-amber-600',
+      icon: Zap,
+    },
+  ];
+
   return (
     <Card>
       <CardContent className="p-5 sm:p-6">
-        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-          Deadlines
-        </p>
-        <h2 className="mt-1 font-display text-lg font-bold text-foreground sm:text-xl">
+        <h2 className="font-display text-lg font-bold text-foreground sm:text-xl">
           Tasks &amp; Deadlines
         </h2>
 
         <div className="mt-4 space-y-4">
-          {GROUP_ORDER.map((kind) => (
-            <TaskGroup
-              key={kind}
-              kind={kind}
-              items={tasks[kind === 'ACTION REQUIRED' ? 'action' : kind === 'UPCOMING' ? 'upcoming' : 'overdue']}
-            />
+          {groups.map((group) => (
+            <TaskGroup key={group.label} {...group} />
           ))}
+
+          {/* OVERDUE red block with the URGENT pill (spec §5.1). */}
+          {tasks.overdue.length > 0 && (
+            <div>
+              <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-danger">
+                <AlertTriangle className="size-3.5" aria-hidden="true" />
+                Overdue
+              </p>
+              <ul className="mt-2 space-y-2">
+                {tasks.overdue.map((item) => (
+                  <li
+                    key={item.title}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-danger/40 bg-danger-bg px-3 py-2.5"
+                  >
+                    <span className="min-w-0 text-sm font-semibold text-foreground">{item.title}</span>
+                    <span className="shrink-0 rounded-full bg-danger px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                      {item.due}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         <div className="mt-4">

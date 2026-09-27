@@ -17,10 +17,10 @@ export default function RecentActivity({ items }: { items: DashActivity[] }) {
   return (
     <Card>
       <CardContent className="p-5 sm:p-6">
-        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Feed</p>
-        <h2 className="mt-1 font-display text-lg font-bold text-foreground sm:text-xl">
+        <h2 className="font-display text-lg font-bold text-foreground sm:text-xl">
           Recent Activity
         </h2>
+        <p className="mt-1 text-sm text-muted-foreground">Departmental audit trail</p>
 
         <ul className="mt-4 space-y-4">
           {items.map((item) => {

@@ -10,7 +10,7 @@ export type UserStatus = 'ACTIVE' | 'INVITED' | 'INACTIVE';
 
 export interface ConsoleUser {
   id: string;
-  /** Mockup-style display code — fixtures only; live rows show the email alone. */
+  /** Display code — fixtures pass theirs through; live rows derive `USR-XXXX` from the id (spec §4). */
   code?: string;
   firstName: string;
   lastName: string;

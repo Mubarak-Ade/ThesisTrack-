@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import { downloadCsv } from '@/lib/csv';
+import { Button } from '@/components/ui/button';
+import { Download, UserPlus } from 'lucide-react';
 import type { ConsoleStats, Role, SecurityLog, UsersPage } from '../data/types';
 import { getStats, listSecurityLogs, listUsers } from '../data/usersRepo';
-import Pagination from '../components/Pagination';
+import Pagination from '@/components/ui/pagination';
 import SampleDataBanner from '../components/SampleDataBanner';
 import SecurityLogsRail from '../components/SecurityLogsRail';
 import StatCards from '../components/StatCards';
 import UsersTable, { type SortKey, type SortState } from '../components/UsersTable';
-import { BulkEnrollmentCard, GuideLinks } from '../components/UsersSideCards';
+import { BulkEnrollmentCard } from '../components/UsersSideCards';
 import UsersToolbar from '../components/UsersToolbar';
 
 function compareUsers(
@@ -26,9 +28,10 @@ function compareUsers(
 
 /**
  * All Users (spec §5.2): live list/search/filter/paging via `listUsers`,
- * client-side sorting of the loaded page, mock stat/security rails.
+ * client-side sorting of the loaded page, mock stats/security rails.
  */
 export default function UserList() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
   const [role, setRole] = useState<Role | undefined>(undefined);
@@ -86,6 +89,14 @@ export default function UserList() {
     );
   };
 
+  // Shared pager inputs (spec §5.2 — footer counts real rows).
+  const total = data?.total ?? 0;
+  const pagerPage = data?.page ?? page;
+  const pagerLimit = data?.limit ?? limit;
+  const pagerCount = Math.max(1, Math.ceil(total / pagerLimit));
+  const pagerFrom = total === 0 ? 0 : (pagerPage - 1) * pagerLimit + 1;
+  const pagerTo = Math.min(pagerPage * pagerLimit, total);
+
   const clearFilters = () => {
     setRole(undefined);
     setIsActive(undefined);
@@ -95,9 +106,10 @@ export default function UserList() {
   const exportCsv = () => {
     downloadCsv(
       `thesistrack-users-page-${page}.csv`,
-      ['Name', 'Email', 'Role', 'Department', 'Status', 'Last Login'],
+      ['Name', 'Code', 'Email', 'Role', 'Department', 'Status', 'Last Login'],
       rows.map((user) => [
         `${user.firstName} ${user.lastName}`,
+        user.code ?? '',
         user.email,
         user.role,
         user.department ?? '',
@@ -109,79 +121,85 @@ export default function UserList() {
 
   return (
     <div className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
-      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Link to="/" className="transition-colors hover:text-primary">
-          Home
-        </Link>
-        <span aria-hidden="true">/</span>
-        <span className="font-medium text-foreground">Users</span>
+      {/* Breadcrumb (spec §3): ADMINISTRATION › USER MANAGEMENT */}
+      <nav
+        aria-label="Breadcrumb"
+        className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+      >
+        <span>Administration</span>
+        <span aria-hidden="true">›</span>
+        <span className="text-foreground">User Management</span>
       </nav>
 
-      <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+      <header className="mt-3 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-primary">
-            User Management
-          </p>
-          <h1 className="mt-1 font-display text-2xl font-bold text-foreground sm:text-3xl">
+          <h1 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
             All Users
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Search, filter and manage every account in the department directory.
+            Manage institutional accounts, permissions, and department assignments.
           </p>
         </div>
-      </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" onClick={exportCsv}>
+            <Download aria-hidden="true" />
+            Export CSV
+          </Button>
+          <Button type="button" onClick={() => navigate('/users/new')}>
+            <UserPlus aria-hidden="true" />
+            Create User
+          </Button>
+        </div>
+      </header>
 
       <div className="mt-6 space-y-4">
         {data?.usedFallback && <SampleDataBanner />}
 
         {stats && <StatCards stats={stats} />}
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="min-w-0 space-y-4 lg:col-span-2">
-            <UsersToolbar
-              search={search}
-              onSearchChange={(value) => {
-                setSearch(value);
-                setPage(1);
-              }}
-              role={role}
-              onRoleChange={(value) => {
-                setRole(value);
-                setPage(1);
-              }}
-              isActive={isActive}
-              onIsActiveChange={(value) => {
-                setIsActive(value);
-                setPage(1);
-              }}
-              onClearFilters={clearFilters}
-              onExport={exportCsv}
-            />
+        <UsersToolbar
+          search={search}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(1);
+          }}
+          role={role}
+          onRoleChange={(value) => {
+            setRole(value);
+            setPage(1);
+          }}
+          isActive={isActive}
+          onIsActiveChange={(value) => {
+            setIsActive(value);
+            setPage(1);
+          }}
+          onClearFilters={clearFilters}
+          limit={limit}
+          onLimitChange={(value) => {
+            setLimit(value);
+            setPage(1);
+          }}
+        />
 
-            <UsersTable
-              rows={rows}
-              sort={sort}
-              onSort={handleSort}
-              loading={data === null}
-            />
+        <UsersTable
+          rows={rows}
+          sort={sort}
+          onSort={handleSort}
+          loading={data === null}
+        />
 
-            <Pagination
-              page={data?.page ?? page}
-              limit={data?.limit ?? limit}
-              total={data?.total ?? 0}
-              onPageChange={setPage}
-              onLimitChange={(value) => {
-                setLimit(value);
-                setPage(1);
-              }}
-            />
-          </div>
+        <Pagination
+          page={pagerPage}
+          pageCount={pagerCount}
+          footer={`Showing ${pagerFrom}–${pagerTo} of ${total} users`}
+          onPageChange={setPage}
+          loading={data === null}
+        />
 
-          <div className="space-y-4">
-            <SecurityLogsRail logs={logs} />
-            <BulkEnrollmentCard />
-            <GuideLinks />
-          </div>
+        {/* Full-width 2-col below the grid (spec §5.2). */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SecurityLogsRail logs={logs} />
+          <BulkEnrollmentCard />
         </div>
       </div>
     </div>

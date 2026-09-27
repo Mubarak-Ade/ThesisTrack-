@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { users, projects, supervisorAssignments } from '../schema/index.js';
-import { hashPassword } from '../services/password.js';
+import { hashPassword } from '../modules/auth/service.js';
 
 /**
  * Deterministic fixtures for the RBAC test matrix:

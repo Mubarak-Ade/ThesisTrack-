@@ -53,6 +53,25 @@ Never stage `apps/api/**`, `pnpm-workspace.yaml`, `.claude/`,
   list the selectors each will need when its phase lands (kept here so
   phases don't rediscover them).
 
+**0.3 findings:** no Checkbox primitive exists (`ui/` = button, input,
+progress, alert, separator, form, badge, card, label) → native input
+confirmed; `progress` primitive available for faculty avg-progress bars; no
+breadcrumb/section-header helper — screens render their own breadcrumb
+markup.
+
+**0.4 findings (test → owning phase):**
+- `App.test` "console shell renders for the real user" → **Phase 2** (nav
+  items / sidebar / footer assertions).
+- `UserCreate.test` — field ids `uc-first/uc-last/uc-email/uc-role`, submit
+  label, preview copy, inline error text → **Phase 5** (labels + checkbox
+  cards change; keep field ids and error assertions).
+- `UserList.test` — row rendering + sample-banner queries → **Phase 4**
+  (columns/status/pager change; keep banner + row-email queries).
+- `UserProfile.test` — detail merge, not-found back link, Reset Password
+  toasts → **Phase 6** (header/rails restructure; reset label + back link
+  stay stable).
+- `mappers.test` extended here in 0.1 (code derivation cases) ✓.
+
 **Check:** `pnpm -r typecheck && pnpm lint && pnpm --filter @thesistrack/web
 test` green (83 + new mapper cases).
 

@@ -1,23 +1,34 @@
 import { BookOpen, Clock, FileText, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { UserDetail } from '../data/types';
 
-/** Thesis Assignments rail — fixtures, no endpoint (spec §4). */
+/** Thesis Assignments rail — fixtures, no endpoint (spec §4/§5.4). */
 export function ThesisAssignments({ detail }: { detail: UserDetail }) {
   return (
     <Card>
       <CardContent className="p-5 sm:p-6">
-        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Research</p>
-        <h2 className="mt-1 font-display text-lg font-bold text-foreground">
-          Thesis Assignments
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-lg font-bold text-foreground">Thesis Assignments</h2>
+          <button
+            type="button"
+            onClick={() => toast.info('Project creation is not available yet')}
+            className="text-xs font-bold uppercase tracking-wider text-primary transition-colors hover:underline"
+          >
+            Add Project ›
+          </button>
+        </div>
 
-        <ul className="mt-4 space-y-3">
+        {/* Two cards side-by-side (spec §5.4). */}
+        <ul className="mt-4 grid gap-3 sm:grid-cols-2">
           {detail.theses.map((thesis) => (
-            <li key={thesis.code} className="rounded-xl border border-border bg-background p-4">
+            <li
+              key={thesis.code}
+              className="flex flex-col rounded-xl border border-border bg-background p-4"
+            >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 text-xs font-bold text-primary">
                   <BookOpen className="size-3.5" aria-hidden="true" />
@@ -31,9 +42,16 @@ export function ThesisAssignments({ detail }: { detail: UserDetail }) {
                 </Badge>
               </div>
               <p className="mt-2 text-sm font-semibold text-foreground">{thesis.title}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Supervisor: {thesis.supervisor} • Updated {thesis.updated}
-              </p>
+              <dl className="mt-3 space-y-1.5 border-t border-border pt-3 text-xs">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-muted-foreground">Supervisor</dt>
+                  <dd className="text-right font-medium text-foreground">{thesis.supervisor}</dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-muted-foreground">Last updated</dt>
+                  <dd className="text-right font-medium text-foreground">{thesis.updated}</dd>
+                </div>
+              </dl>
             </li>
           ))}
         </ul>
@@ -42,13 +60,26 @@ export function ThesisAssignments({ detail }: { detail: UserDetail }) {
   );
 }
 
-/** Audit logs rail — fixtures (spec §4). */
+/** Audit logs rail — fixtures (spec §4/§5.4). */
 export function AuditLogs({ detail }: { detail: UserDetail }) {
   return (
     <Card>
       <CardContent className="p-5 sm:p-6">
-        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Security</p>
-        <h2 className="mt-1 font-display text-lg font-bold text-foreground">Audit Logs</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              Security
+            </p>
+            <h2 className="mt-1 font-display text-lg font-bold text-foreground">Audit Logs</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => toast.info('The full audit history is not available yet')}
+            className="text-xs font-semibold text-primary transition-colors hover:underline"
+          >
+            View Full Audit History ↗
+          </button>
+        </div>
 
         <div className="relative mt-4 overflow-x-auto">
           <table className="w-full min-w-[420px] text-left text-sm">

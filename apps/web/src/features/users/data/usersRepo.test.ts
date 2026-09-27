@@ -109,7 +109,7 @@ describe('getUser', () => {
     expect(detail?.extras.phone).toBe('+1 (555) 012-3456');
     expect(detail?.theses).toHaveLength(2);
     expect(detail?.audit.length).toBeGreaterThan(0);
-    expect(detail?.code).toBeUndefined(); // live rows carry no fixture code
+    expect(detail?.code).toBe('USR-0000'); // live rows derive USR-XXXX from the id (spec §4)
   });
 
   it('returns the fixture row for a known id when the API fails', async () => {

@@ -1,9 +1,10 @@
-import { Download, Search, SlidersHorizontal, X } from 'lucide-react';
+import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { Role } from '../data/types';
+import { PAGE_SIZES } from '@/components/ui/pagination';
 
 const ROLE_OPTIONS: { value: Role | ''; label: string }[] = [
   { value: '', label: 'All roles' },
@@ -29,7 +30,9 @@ interface UsersToolbarProps {
   isActive: boolean | undefined;
   onIsActiveChange: (value: boolean | undefined) => void;
   onClearFilters: () => void;
-  onExport: () => void;
+  /** `Show: [N Rows]` row-size control (spec §5.2). */
+  limit: number;
+  onLimitChange: (limit: number) => void;
 }
 
 export default function UsersToolbar({
@@ -40,7 +43,8 @@ export default function UsersToolbar({
   isActive,
   onIsActiveChange,
   onClearFilters,
-  onExport,
+  limit,
+  onLimitChange,
 }: UsersToolbarProps) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
@@ -68,7 +72,7 @@ export default function UsersToolbar({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       {/* Search → debounced `q` on the parent (spec §5.2). */}
-      <div className="relative flex-1">
+      <div className="relative flex-1 sm:max-w-md">
         <Search
           className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
           aria-hidden="true"
@@ -76,13 +80,14 @@ export default function UsersToolbar({
         <Input
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search by name or email…"
+          placeholder="Search by name, email, or user ID…"
           aria-label="Search users"
           className="pl-9"
         />
       </div>
 
-      <div className="flex items-center gap-2">
+      {/* `contents` keeps Filters beside the search while `Show:` sits right. */}
+      <div className="contents">
         <div className="relative" ref={filtersRef}>
           <Button
             type="button"
@@ -163,11 +168,21 @@ export default function UsersToolbar({
           )}
         </div>
 
-        <Button type="button" variant="outline" onClick={onExport} className="h-11">
-          <Download aria-hidden="true" />
-          <span className="hidden sm:inline">Export CSV</span>
-          <span className="sm:hidden">Export</span>
-        </Button>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground sm:ml-auto">
+          Show:
+          <select
+            aria-label="Rows per page"
+            value={limit}
+            onChange={(event) => onLimitChange(Number(event.target.value))}
+            className="h-11 rounded-md border border-input bg-white px-2.5 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+          >
+            {PAGE_SIZES.map((size) => (
+              <option key={size} value={size}>
+                {size} Rows
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
     </div>
   );

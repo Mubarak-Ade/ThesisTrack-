@@ -75,15 +75,22 @@ describe('UserProfile (plan 6)', () => {
 
     expect(await screen.findByRole('heading', { name: 'User Profile' })).toBeInTheDocument();
     expect(await screen.findByText('Marcus Holloway')).toBeInTheDocument();
-    // Real UUID id line (spec §4) + fixture code next to it.
-    expect(screen.getByText(`ID: ${DETAIL.id}`)).toBeInTheDocument();
-    expect(screen.getByText('USR-9012')).toBeInTheDocument();
-    // Contact extras merged from fixtures.
+    // Derived code in the header (spec §5.4 — mockup shows ID: USR-XXXX).
+    expect(screen.getByText(`ID: ${DETAIL.code}`)).toBeInTheDocument();
+    // Header card counters (fixture milestones).
+    expect(screen.getByText('Theses')).toBeInTheDocument();
+    expect(screen.getByText('Milestones')).toBeInTheDocument();
+    expect(screen.getByText('14')).toBeInTheDocument();
+    // Contact extras merged from fixtures + live Member Since.
     expect(screen.getByText('+1 (555) 012-3456')).toBeInTheDocument();
     expect(screen.getByText('742 Evergreen Terrace, Springfield')).toBeInTheDocument();
-    // Rails rendered.
+    expect(screen.getByText('Member Since')).toBeInTheDocument();
+    expect(screen.getByText('Send Direct Message')).toBeInTheDocument();
+    // Rails rendered with their new actions.
     expect(screen.getByText('Neural Network Optimization for Edge Devices')).toBeInTheDocument();
+    expect(screen.getByText('Add Project ›')).toBeInTheDocument();
     expect(screen.getByText('Account Login')).toBeInTheDocument();
+    expect(screen.getByText('View Full Audit History ↗')).toBeInTheDocument();
     expect(getUser).toHaveBeenCalledWith(DETAIL.id);
   });
 
@@ -93,7 +100,8 @@ describe('UserProfile (plan 6)', () => {
     renderProfile('99999999-9999-4999-8999-999999999999');
 
     expect(await screen.findByText('User not found')).toBeInTheDocument();
-    const back = screen.getByRole('link', { name: /back to all users/i });
+    // Exact-case name: the header back arrow is "Back to All Users".
+    const back = screen.getByRole('link', { name: 'Back to all users' });
     expect(back).toHaveAttribute('href', '/users');
     expect(sendInvite).not.toHaveBeenCalled();
   });

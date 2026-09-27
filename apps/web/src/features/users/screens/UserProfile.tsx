@@ -1,13 +1,13 @@
-import { ArrowLeft, KeyRound, MessageSquare, Pencil, UserX } from 'lucide-react';
+import { ArrowLeft, KeyRound, MoreHorizontal, Pencil, UserX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ApiError } from '@/lib/api/http';
 import ContactCard from '../components/ContactCard';
-import RoleBadge from '../components/RoleBadge';
 import StatusBadge from '../components/StatusBadge';
 import {
   ActivityFeed,
@@ -21,13 +21,6 @@ import { getUser, sendInvite } from '../data/usersRepo';
 
 function titleCaseRole(role: string): string {
   return ROLE_LABELS[role as keyof typeof ROLE_LABELS] ?? role.charAt(0).toUpperCase() + role.slice(1);
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function NotFound() {
@@ -53,6 +46,10 @@ function NotFound() {
     </Card>
   );
 }
+
+/** Fixture counters in the header card (spec §5.4). */
+const MILESTONES = '14';
+const DEPT_FALLBACK = 'Informatics & AI';
 
 /** User Profile (spec §5.4): live core + fixture rails; Reset Password = re-invite. */
 export default function UserProfile() {
@@ -88,24 +85,71 @@ export default function UserProfile() {
 
   return (
     <div className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
-      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Link to="/" className="transition-colors hover:text-primary">
-          Home
-        </Link>
-        <span aria-hidden="true">/</span>
+      {/* Breadcrumb (spec §3): ADMIN › USERS › USER DETAILS */}
+      <nav
+        aria-label="Breadcrumb"
+        className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+      >
+        <span>Admin</span>
+        <span aria-hidden="true">›</span>
         <Link to="/users" className="transition-colors hover:text-primary">
           Users
         </Link>
-        <span aria-hidden="true">/</span>
-        <span className="font-medium text-foreground">Profile</span>
+        <span aria-hidden="true">›</span>
+        <span className="text-foreground">User Details</span>
       </nav>
 
-      <div className="mt-2">
-        <p className="text-xs font-bold uppercase tracking-widest text-primary">User Management</p>
-        <h1 className="mt-1 font-display text-2xl font-bold text-foreground sm:text-3xl">
-          User Profile
-        </h1>
-      </div>
+      <header className="mt-3 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <Link
+            to="/users"
+            aria-label="Back to All Users"
+            className="grid size-10 shrink-0 place-items-center rounded-full border border-input bg-white text-foreground shadow-sm transition-colors hover:bg-accent"
+          >
+            <ArrowLeft className="size-4" aria-hidden="true" />
+          </Link>
+          <div>
+            <h1 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
+              User Profile
+            </h1>
+            {detail && (
+              <p className="mt-1 font-mono text-sm text-muted-foreground">
+                ID: {detail.code || detail.id}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={resetPassword}
+            disabled={reinviting || !detail}
+          >
+            <KeyRound aria-hidden="true" />
+            {reinviting ? 'Sending…' : 'Reset Password'}
+          </Button>
+          <Button
+            type="button"
+            onClick={() => toast.info('Editing users is not available yet')}
+            disabled={!detail}
+          >
+            <Pencil aria-hidden="true" />
+            Edit User
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="More profile actions"
+            onClick={() => toast.info('More actions are not available yet')}
+            disabled={!detail}
+          >
+            <MoreHorizontal aria-hidden="true" />
+          </Button>
+        </div>
+      </header>
 
       {detail === undefined ? (
         <div className="mt-8 flex items-center gap-3 text-sm text-muted-foreground" role="status">
@@ -118,61 +162,43 @@ export default function UserProfile() {
         </div>
       ) : (
         <div className="mt-6 space-y-4">
-          {/* Header card */}
+          {/* Header card: silhouette + name + ACTIVE pill + role line + counters */}
           <Card>
             <CardContent className="p-5 sm:p-6">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex min-w-0 items-start gap-4">
-                  <span className="grid size-14 shrink-0 place-items-center rounded-full bg-primary/10 text-xl font-bold text-primary">
-                    {`${detail.firstName.charAt(0)}${detail.lastName.charAt(0)}`.toUpperCase()}
-                  </span>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-4">
+                  <Avatar size="xl" className="shrink-0" />
                   <div className="min-w-0">
                     <h2 className="font-display text-xl font-bold text-foreground">
                       {detail.firstName} {detail.lastName}
                     </h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {titleCaseRole(detail.role)}
-                      {detail.extras.department ?? detail.department
-                        ? ` • ${detail.extras.department ?? detail.department}`
-                        : ''}
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <RoleBadge role={detail.role} />
-                      <StatusBadge status={detail.status} />
-                      {detail.code && (
-                        <span className="text-xs font-mono text-muted-foreground">{detail.code}</span>
-                      )}
+                    <div className="mt-1.5">
+                      <StatusBadge status={detail.status} className="uppercase" />
                     </div>
-                    <p className="mt-3 break-all font-mono text-[11px] text-muted-foreground">
-                      ID: {detail.id}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Member since {formatDate(detail.createdAt)}
+                    <p className="mt-1.5 text-sm text-muted-foreground">
+                      {titleCaseRole(detail.role)} •{' '}
+                      {detail.extras.department ?? detail.department ?? DEPT_FALLBACK}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex shrink-0 flex-wrap gap-2">
-                  <Button type="button" onClick={resetPassword} disabled={reinviting}>
-                    <KeyRound aria-hidden="true" />
-                    {reinviting ? 'Sending…' : 'Reset Password'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => toast.info('Editing users is not available yet')}
-                  >
-                    <Pencil aria-hidden="true" />
-                    Edit User
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => toast.info('Direct messages are not available yet')}
-                  >
-                    <MessageSquare aria-hidden="true" />
-                    Send Message
-                  </Button>
+                <div className="flex shrink-0 divide-x divide-border sm:pl-4">
+                  <div className="px-4 text-center sm:px-6">
+                    <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                      Theses
+                    </p>
+                    <p className="mt-1 font-display text-3xl font-bold text-foreground">
+                      {String(detail.theses.length).padStart(2, '0')}
+                    </p>
+                  </div>
+                  <div className="px-4 text-center sm:px-6">
+                    <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                      Milestones
+                    </p>
+                    <p className="mt-1 font-display text-3xl font-bold text-foreground">
+                      {MILESTONES}
+                    </p>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -180,12 +206,12 @@ export default function UserProfile() {
 
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="min-w-0 space-y-4 lg:col-span-2">
-              <ContactCard detail={detail} />
               <ThesisAssignments detail={detail} />
               <AuditLogs detail={detail} />
               <ActivityFeed detail={detail} />
             </div>
             <div className="space-y-4">
+              <ContactCard detail={detail} />
               <AdminOversight detail={detail} />
             </div>
           </div>

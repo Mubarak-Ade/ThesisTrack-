@@ -18,6 +18,8 @@ import ResetPassword from '@/features/auth/screens/ResetPassword';
 import SessionExpired from '@/features/auth/screens/SessionExpired';
 import Unauthorized from '@/features/auth/screens/Unauthorized';
 import CoordinatorDashboard from '@/features/dashboard/screens/CoordinatorDashboard';
+import SupervisorList from '@/features/faculty/screens/SupervisorList';
+import StudentList from '@/features/students/screens/StudentList';
 import UserCreate from '@/features/users/screens/UserCreate';
 import UserImport from '@/features/users/screens/UserImport';
 import UserList from '@/features/users/screens/UserList';
@@ -38,6 +40,8 @@ function App() {
         }
       >
         <Route path="/dashboard" element={<CoordinatorDashboard />} />
+        <Route path="/faculty" element={<SupervisorList />} />
+        <Route path="/students" element={<StudentList />} />
         <Route path="/users" element={<UserList />} />
         <Route path="/users/new" element={<UserCreate />} />
         <Route path="/users/import" element={<UserImport />} />

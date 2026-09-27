@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 
+import { Button } from '@/components/ui/button';
 import { getDashboard } from '../data';
 import type { DashboardData } from '../data/types';
+import { exportWorkspaceCsv } from '../lib/exportWorkspace';
 import QuickActions from '../components/QuickActions';
 import RecentActivity from '../components/RecentActivity';
 import {
@@ -31,24 +33,34 @@ export default function CoordinatorDashboard() {
 
   return (
     <div className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 sm:py-8">
-      {/* Breadcrumb */}
-      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Link to="/" className="transition-colors hover:text-primary">
-          Home
-        </Link>
-        <span aria-hidden="true">/</span>
-        <span className="font-medium text-foreground">Dashboard</span>
+      {/* Breadcrumb (spec §3): ADMIN › DASHBOARD */}
+      <nav
+        aria-label="Breadcrumb"
+        className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+      >
+        <span>Admin</span>
+        <span aria-hidden="true">›</span>
+        <span className="text-foreground">Dashboard</span>
       </nav>
 
-      <div className="mt-2">
-        <p className="text-xs font-bold uppercase tracking-widest text-primary">Overview</p>
-        <h1 className="mt-1 font-display text-2xl font-bold text-foreground sm:text-3xl">
+      <header className="mt-3 flex flex-wrap items-start justify-between gap-3">
+        <h1 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
           Coordinator Dashboard
         </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Thesis projects, deadlines and student progress across the department.
-        </p>
-      </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => data && exportWorkspaceCsv(data.workspace)}
+            disabled={!data}
+          >
+            Export Data
+          </Button>
+          <Button type="button" onClick={() => toast.info('New Project is not available yet')}>
+            + New Project
+          </Button>
+        </div>
+      </header>
 
       {!data ? (
         <div className="mt-8 flex items-center gap-3 text-sm text-muted-foreground" role="status">
@@ -63,18 +75,21 @@ export default function CoordinatorDashboard() {
             <DepartmentProgressCard department={data.department} />
           </div>
 
-          {/* Workspace table + tasks/activity rail */}
+          {/* Workspace table | Tasks rail */}
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="min-w-0 lg:col-span-2">
-              <WorkspaceTable rows={data.workspace} />
+              <WorkspaceTable rows={data.workspace} total={data.workspaceTotal} />
             </div>
-            <div className="space-y-4">
+            <div className="min-w-0">
               <TasksRail tasks={data.tasks} />
-              <RecentActivity items={data.activity} />
             </div>
           </div>
 
-          <QuickActions workspace={data.workspace} />
+          {/* Recent Activity | Quick Actions */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <RecentActivity items={data.activity} />
+            <QuickActions actions={data.quickActions} workspace={data.workspace} />
+          </div>
         </div>
       )}
     </div>
