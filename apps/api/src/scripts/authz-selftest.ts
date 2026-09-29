@@ -120,12 +120,25 @@ async function main(): Promise<void> {
 
   const [projectRow] = await db
     .insert(projects)
-    .values({ studentId: ownerRow.id, title: 'Authz selftest project' })
+    .values({ studentId: ownerRow.id, title: 'Authz selftest project', description: 'Authorization self-test.' })
     .returning({ id: projects.id });
 
   const { supervisorAssignments } = await import('../schema/index.js');
-  await db.insert(supervisorAssignments).values({ projectId: projectRow.id, supervisorId: supRow.id, isPrimary: true });
-  await db.insert(supervisorAssignments).values({ projectId: projectRow.id, supervisorId: supEndedRow.id, endedAt: new Date() });
+  // Both rows belong to ownerRow's student (spec §8.2). Only supRow is ACTIVE;
+  // supEndedRow is history, so the two never collide on
+  // idx_supervisor_assignments_active_student (I13).
+  await db.insert(supervisorAssignments).values({
+    studentId: ownerRow.id,
+    projectId: projectRow.id,
+    supervisorId: supRow.id,
+    isPrimary: true,
+  });
+  await db.insert(supervisorAssignments).values({
+    studentId: ownerRow.id,
+    projectId: projectRow.id,
+    supervisorId: supEndedRow.id,
+    endedAt: new Date(),
+  });
 
   const owner: AuthUser = { id: ownerRow.id, email: 'owner@test.local', role: 'student' };
   const other: AuthUser = { id: randomUUID(), email: 'other@test.local', role: 'student' };

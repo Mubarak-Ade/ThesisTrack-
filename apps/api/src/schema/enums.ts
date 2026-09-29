@@ -28,6 +28,9 @@ export const reviewDecisionEnum = pgEnum('review_decision', [
   'rejected',
 ]);
 
+// §8.9 — + 'proposal' (submitted / revision requested / approved) and
+// + 'deadline' (approaching). The original six members could not express
+// either without mislabelling them as 'general'.
 export const notificationTypeEnum = pgEnum('notification_type', [
   'assignment',
   'submission',
@@ -35,6 +38,8 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'feedback',
   'milestone',
   'general',
+  'proposal',
+  'deadline',
 ]);
 
 export const milestoneStatusEnum = pgEnum('milestone_status', [

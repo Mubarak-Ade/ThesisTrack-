@@ -68,19 +68,31 @@ async function upsertProject(p: (typeof PROJECTS)[number], ownerId: string): Pro
   return created.id;
 }
 
-/** End every still-active row on the project (never deletes — history stays). */
-async function endAllActive(projectId: string): Promise<void> {
+/**
+ * End every still-active row for the STUDENT (never deletes — history stays).
+ *
+ * Scoped by `studentId`, not `projectId`: since spec §8.2 the partial unique
+ * index `idx_supervisor_assignments_active_student` bounds actives per student
+ * (I13). Ending per project would leave a second active row alive for the same
+ * student and the re-activate below would then violate that index.
+ */
+async function endAllActive(studentId: string): Promise<void> {
   await db
     .update(supervisorAssignments)
     .set({ endedAt: new Date() })
-    .where(and(eq(supervisorAssignments.projectId, projectId), isNull(supervisorAssignments.endedAt)));
+    .where(and(eq(supervisorAssignments.studentId, studentId), isNull(supervisorAssignments.endedAt)));
 }
 
-/** Ensure an ENDED history row exists for the pair. */
-async function ensureEndedRow(projectId: string, supervisorId: string, adminId: string): Promise<void> {
+/** Ensure an ENDED history row exists for the student/supervisor pair. */
+async function ensureEndedRow(
+  studentId: string,
+  projectId: string,
+  supervisorId: string,
+  adminId: string,
+): Promise<void> {
   const existing = await db.query.supervisorAssignments.findFirst({
     where: and(
-      eq(supervisorAssignments.projectId, projectId),
+      eq(supervisorAssignments.studentId, studentId),
       eq(supervisorAssignments.supervisorId, supervisorId),
     ),
   });
@@ -94,6 +106,7 @@ async function ensureEndedRow(projectId: string, supervisorId: string, adminId: 
     return;
   }
   await db.insert(supervisorAssignments).values({
+    studentId,
     projectId,
     supervisorId,
     isPrimary: false,
@@ -103,11 +116,16 @@ async function ensureEndedRow(projectId: string, supervisorId: string, adminId: 
   });
 }
 
-/** Make exactly one ACTIVE super row for the project (creating it if needed). */
-async function ensureActiveRow(projectId: string, supervisorId: string, adminId: string): Promise<void> {
+/** Make exactly one ACTIVE super row for the student (creating it if needed). */
+async function ensureActiveRow(
+  studentId: string,
+  projectId: string,
+  supervisorId: string,
+  adminId: string,
+): Promise<void> {
   const rows = await db.query.supervisorAssignments.findMany({
     where: and(
-      eq(supervisorAssignments.projectId, projectId),
+      eq(supervisorAssignments.studentId, studentId),
       eq(supervisorAssignments.supervisorId, supervisorId),
     ),
     orderBy: (t, { desc }) => [desc(t.assignedAt)],
@@ -115,6 +133,7 @@ async function ensureActiveRow(projectId: string, supervisorId: string, adminId:
 
   if (rows.length === 0) {
     await db.insert(supervisorAssignments).values({
+      studentId,
       projectId,
       supervisorId,
       isPrimary: true,
@@ -160,13 +179,15 @@ async function main(): Promise<void> {
   }
 
   // P1: history first (ended super2), then the single active super1 row.
-  await endAllActive(ids.projectId);
-  await ensureEndedRow(ids.projectId, ids.super2, admin.id);
-  await ensureActiveRow(ids.projectId, ids.super1, admin.id);
+  // All three calls are keyed on the student (ownerA) — I13 lives on
+  // student_id, so "bare" means "no ACTIVE row for this student".
+  await endAllActive(ids.ownerA);
+  await ensureEndedRow(ids.ownerA, ids.projectId, ids.super2, admin.id);
+  await ensureActiveRow(ids.ownerA, ids.projectId, ids.super1, admin.id);
 
   // P2 and P3 must be bare (write tests assign them from scratch).
-  await endAllActive(ids.bareProjectId);
-  await endAllActive(ids.completedProjectId);
+  await endAllActive(ids.ownerB);
+  await endAllActive(ids.ownerC);
 
   const summary = {
     password: PASSWORD,

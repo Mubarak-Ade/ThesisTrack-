@@ -7,6 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
     "seed:rbac": "tsx src/scripts/seed-rbac-fixtures.ts",
+    "seed:templates": "tsx src/scripts/seed-milestone-templates.ts",
     "authz:selftest": "tsx src/scripts/authz-selftest.ts",
     "build": "tsc",
     "start": "node dist/src/server.js",

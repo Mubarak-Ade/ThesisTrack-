@@ -9,7 +9,13 @@ export type AssignmentWithSupervisor = SupervisorAssignmentRow & { supervisor: U
 /** The API shape of an assignment — history's answer to who/when/by whom. */
 export interface AssignmentView {
   id: string;
-  projectId: string;
+  /**
+   * Nullable to mirror the row: since spec §8.2 an assignment can exist
+   * BEFORE its project (ADR-13 — supervisor assigned, proposal submitted to
+   * them afterwards). Every endpoint in this module is project-scoped, so the
+   * value is always set on these responses.
+   */
+  projectId: string | null;
   isPrimary: boolean;
   assignedAt: Date;
   endedAt: Date | null;

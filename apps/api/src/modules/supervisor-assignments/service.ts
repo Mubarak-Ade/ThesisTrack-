@@ -118,7 +118,7 @@ export async function assign(
   supervisorId: string,
   actorId: string,
 ): Promise<AssignmentView> {
-  await loadActiveProject(projectId);
+  const project = await loadActiveProject(projectId);
 
   const active = await findActiveAssignmentForProject(projectId);
   if (active) {
@@ -130,6 +130,9 @@ export async function assign(
   try {
     const row = await insertAssignment({
       projectId,
+      // The student owns the assignment (spec §8.2) — taken from the project
+      // rather than the request, so a caller cannot point it elsewhere.
+      studentId: project.studentId,
       supervisorId,
       isPrimary: true, // the single active assignment IS the primary
       assignedBy: actorId,
@@ -153,7 +156,7 @@ export async function changeSupervisor(
   supervisorId: string,
   actorId: string,
 ): Promise<AssignmentView> {
-  await loadActiveProject(projectId);
+  const project = await loadActiveProject(projectId);
 
   const active = await findActiveAssignmentForProject(projectId);
   if (!active) {
@@ -174,7 +177,13 @@ export async function changeSupervisor(
         return undefined;
       }
       return insertAssignment(
-        { projectId, supervisorId, isPrimary: true, assignedBy: actorId },
+        {
+          projectId,
+          studentId: project.studentId,
+          supervisorId,
+          isPrimary: true,
+          assignedBy: actorId,
+        },
         tx,
       );
     });

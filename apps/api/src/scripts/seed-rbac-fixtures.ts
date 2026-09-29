@@ -54,10 +54,22 @@ async function upsertUser(a: (typeof ACCOUNTS)[number]): Promise<string> {
   return created.id;
 }
 
-async function upsertAssignment(projectId: string, supervisorId: string, ended: boolean): Promise<void> {
+/**
+ * Create-or-repair one assignment row for the student.
+ *
+ * `studentId` is required (NOT NULL since spec §8.2) and the lookup is keyed on
+ * (student, supervisor) rather than (project, supervisor): that pair is what
+ * `idx_supervisor_assignments_active_student` bounds.
+ */
+async function upsertAssignment(
+  studentId: string,
+  projectId: string,
+  supervisorId: string,
+  ended: boolean,
+): Promise<void> {
   const existing = await db.query.supervisorAssignments.findFirst({
     where: and(
-      eq(supervisorAssignments.projectId, projectId),
+      eq(supervisorAssignments.studentId, studentId),
       eq(supervisorAssignments.supervisorId, supervisorId),
     ),
   });
@@ -65,12 +77,13 @@ async function upsertAssignment(projectId: string, supervisorId: string, ended: 
   if (existing) {
     await db
       .update(supervisorAssignments)
-      .set({ endedAt: ended ? new Date() : null })
+      .set({ endedAt: ended ? new Date() : null, projectId })
       .where(eq(supervisorAssignments.id, existing.id));
     return;
   }
 
   await db.insert(supervisorAssignments).values({
+    studentId,
     projectId,
     supervisorId,
     isPrimary: !ended,
@@ -100,8 +113,11 @@ async function main(): Promise<void> {
     projectId = created.id;
   }
 
-  await upsertAssignment(projectId, ids.superAssigned, false); // active
-  await upsertAssignment(projectId, ids.superEnded, true); // ended → no access
+  // ENDED row first, then the active one: activating superAssigned while
+  // superEnded is still active would briefly create two ACTIVE rows for this
+  // student and trip idx_supervisor_assignments_active_student (I13).
+  await upsertAssignment(ids.owner, projectId, ids.superEnded, true); // ended → no access
+  await upsertAssignment(ids.owner, projectId, ids.superAssigned, false); // active
 
   const summary = {
     password: PASSWORD,
