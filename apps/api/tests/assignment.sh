@@ -146,7 +146,7 @@ adm
 code=$(req POST "$BASE/projects/$P1/supervisor" -H "Authorization: Bearer $T" \
   -H 'Content-Type: application/json' -d "{\"supervisorId\":\"$S3_ID\"}")
 ck 'POST while active exists → 409' 409 "$code"
-ck '409 message' 'This project already has an active supervisor assignment' "$(f error.message)"
+ck '409 message' 'This student already has an active supervisor' "$(f error.message)"
 
 adm
 code=$(req POST "$BASE/projects/$P2/supervisor" -H "Authorization: Bearer $T" \
@@ -186,7 +186,7 @@ adm
 code=$(req PATCH "$BASE/projects/$P1/supervisor" -H "Authorization: Bearer $T" \
   -H 'Content-Type: application/json' -d "{\"supervisorId\":\"$S1_ID\"}")
 ck 'change to the SAME supervisor → 409' 409 "$code"
-ck '409 message' 'This supervisor is already the active assignment' "$(f error.message)"
+ck '409 message' 'This supervisor already supervises this student' "$(f error.message)"
 
 adm
 code=$(req PATCH "$BASE/projects/$P1/supervisor" -H "Authorization: Bearer $T" \
@@ -235,19 +235,79 @@ ck 'history survived the end' true "$(f 'data.history.length>=1')"
 adm
 code=$(req DELETE "$BASE/projects/$P1/supervisor" -H "Authorization: Bearer $T")
 ck 'end with no active → 409' 409 "$code"
-ck '409 message' 'This project has no active supervisor assignment to end' "$(f error.message)"
+ck '409 message' 'This student has no active supervisor assignment to end' "$(f error.message)"
 
 adm
 code=$(req PATCH "$BASE/projects/$P1/supervisor" -H "Authorization: Bearer $T" \
   -H 'Content-Type: application/json' -d "{\"supervisorId\":\"$S2_ID\"}")
 ck 'change with no active → 409' 409 "$code"
-ck '409 message' 'This project has no active supervisor assignment to change' "$(f error.message)"
+ck '409 message' 'This student has no active supervisor assignment to change' "$(f error.message)"
 
 adm
 code=$(req POST "$BASE/projects/$P1/supervisor" -H "Authorization: Bearer $T" \
   -H 'Content-Type: application/json' -d "{\"supervisorId\":\"$S2_ID\"}")
 ck 'assign again after end (rehire via POST) → 201' 201 "$code"
 ck 'rehired supervisor is super2' "$S2_ID" "$(f data.assignment.supervisor.id)"
+
+# ── I13: a supervisor may hold MANY students; a student holds exactly one ──
+# ownerA already holds S2 at this point. Each case below is one the plan calls
+# out: an implementation keyed on supervisor_id would refuse these with a false
+# 409, and a second ACTIVE row for a single student must still be refused.
+echo '== I13 cardinality asymmetry (§6.2 corollary) =='
+
+# The earlier sections leave ownerB assigned to S3. Reset first so every case
+# below starts from a known state. The assertion is on the resulting state, not
+# on the reset, so this stays setup — if B were already bare the DELETE 409s
+# and the check still passes.
+adm
+req DELETE "$BASE/students/$OB_ID/supervisor" -H "Authorization: Bearer $T" >/dev/null
+code=$(req GET "$BASE/students/$OB_ID/supervisor" -H "Authorization: Bearer $T")
+ck 'setup: B unassigned, its ended row kept as history' 'null' "$(f data.active)"
+
+# ownerA holds S2 here — the "already has a student" half of the rule.
+adm
+code=$(req POST "$BASE/students/$OB_ID/supervisor" -H "Authorization: Bearer $T" \
+  -H 'Content-Type: application/json' -d "{\"supervisorId\":\"$S2_ID\"}")
+ck 'POST /students/B/supervisor while A already has S → 201' 201 "$code"
+
+T=$(login "$S2" "$PW")
+code=$(req GET "$BASE/supervisors/me/students" -H "Authorization: Bearer $T")
+ck 'GET /supervisors/me/students → 200' 200 "$code"
+ck 'caseload: one row per student → 2 rows for 2 students' 2 "$(f data.students.length)"
+ck 'caseload holds exactly A and B' "$OA|$OB" "$(f 'data.students.map(s=>s.student.email).sort().join("|")')"
+
+adm
+code=$(req DELETE "$BASE/students/$OB_ID/supervisor" -H "Authorization: Bearer $T")
+ck 'end B → 200 (the row stays as history)' 200 "$code"
+
+adm
+code=$(req POST "$BASE/projects/$P2/supervisor" -H "Authorization: Bearer $T" \
+  -H 'Content-Type: application/json' -d "{\"supervisorId\":\"$S2_ID\"}")
+ck 'POST /projects/B/supervisor while A already has S → 201, not 409' 201 "$code"
+
+# An ENDED row must not block reassignment either — the unique index is partial
+# (WHERE ended_at IS NULL), so history never consumes the one allowed slot.
+adm
+code=$(req POST "$BASE/students/$OC_ID/supervisor" -H "Authorization: Bearer $T" \
+  -H 'Content-Type: application/json' -d "{\"supervisorId\":\"$S3_ID\"}")
+ck 'assign C fresh → 201' 201 "$code"
+
+adm
+code=$(req DELETE "$BASE/students/$OC_ID/supervisor" -H "Authorization: Bearer $T")
+ck 'end C → 200' 200 "$code"
+
+adm
+code=$(req POST "$BASE/students/$OC_ID/supervisor" -H "Authorization: Bearer $T" \
+  -H 'Content-Type: application/json' -d "{\"supervisorId\":\"$S3_ID\"}")
+ck 'student with an ENDED row may be assigned again → 201' 201 "$code"
+
+# The other half of the rule: still at most ONE active row per student, even
+# when the incoming supervisor is someone new.
+adm
+code=$(req POST "$BASE/projects/$P2/supervisor" -H "Authorization: Bearer $T" \
+  -H 'Content-Type: application/json' -d "{\"supervisorId\":\"$S3_ID\"}")
+ck 'second ACTIVE row for one student → 409' 409 "$code"
+ck '409 message' 'This student already has an active supervisor' "$(f error.message)"
 
 echo
 echo "==================================="

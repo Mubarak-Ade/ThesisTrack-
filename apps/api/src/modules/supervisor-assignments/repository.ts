@@ -2,6 +2,7 @@ import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 
 import { db } from '../../config/db.js';
 import { supervisorAssignments } from '../../schema/index.js';
+import type { UserRow } from '../users/types.js';
 import type { AssignmentWithSupervisor, SupervisorAssignmentRow } from './types.js';
 
 /**
@@ -24,15 +25,82 @@ export async function findActiveAssignment(
   });
 }
 
-/** The project's single active assignment (the DB backs this with a unique index). */
-export async function findActiveAssignmentForProject(
-  projectId: string,
+/**
+ * ANY active assignment for this student — **the conflict guard** (spec §6.2
+ * corollary / I13). Keyed on `student_id` and nothing else: a `supervisor_id`
+ * check would forbid a supervisor taking a second student, and a `project_id`
+ * check would miss a student whose assignment predates their project (§13.3).
+ */
+export async function findActiveAssignmentForStudent(
+  studentId: string,
 ): Promise<SupervisorAssignmentRow | undefined> {
   return db.query.supervisorAssignments.findFirst({
     where: and(
-      eq(supervisorAssignments.projectId, projectId),
+      eq(supervisorAssignments.studentId, studentId),
       isNull(supervisorAssignments.endedAt),
     ),
+  });
+}
+
+/**
+ * The (student, supervisor) pair's active row — **the authorization lookup**
+ * (spec §13.3). Answers "does THIS supervisor actively supervise THIS student?"
+ * and works whether or not a project exists yet.
+ */
+export async function findActiveAssignmentForStudentSupervisor(
+  studentId: string,
+  supervisorId: string,
+): Promise<SupervisorAssignmentRow | undefined> {
+  return db.query.supervisorAssignments.findFirst({
+    where: and(
+      eq(supervisorAssignments.studentId, studentId),
+      eq(supervisorAssignments.supervisorId, supervisorId),
+      isNull(supervisorAssignments.endedAt),
+    ),
+  });
+}
+
+/**
+ * A supervisor's whole caseload: every ACTIVE row, student joined. Already one
+ * row per student — I13 makes that a database fact rather than a dedupe.
+ */
+export async function listActiveAssignmentsForSupervisor(
+  supervisorId: string,
+): Promise<Array<SupervisorAssignmentRow & { student: UserRow }>> {
+  return db.query.supervisorAssignments.findMany({
+    where: and(
+      eq(supervisorAssignments.supervisorId, supervisorId),
+      isNull(supervisorAssignments.endedAt),
+    ),
+    orderBy: [desc(supervisorAssignments.assignedAt)],
+    with: { student: true },
+  });
+}
+
+/** The student's active assignment joined with its supervisor (for responses). */
+export async function findActiveAssignmentDetailForStudent(
+  studentId: string,
+): Promise<AssignmentWithSupervisor | undefined> {
+  return db.query.supervisorAssignments.findFirst({
+    where: and(
+      eq(supervisorAssignments.studentId, studentId),
+      isNull(supervisorAssignments.endedAt),
+    ),
+    with: { supervisor: true },
+  });
+}
+
+/** The student's ended assignments (history), most recently started first. */
+export async function listEndedAssignmentsForStudent(
+  studentId: string,
+): Promise<AssignmentWithSupervisor[]> {
+  return db.query.supervisorAssignments.findMany({
+    where: and(
+      eq(supervisorAssignments.studentId, studentId),
+      isNotNull(supervisorAssignments.endedAt),
+    ),
+    orderBy: [desc(supervisorAssignments.assignedAt), desc(supervisorAssignments.id)],
+    with: { supervisor: true },
   });
 }
 

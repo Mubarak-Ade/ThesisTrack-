@@ -10,10 +10,12 @@ import {
   requireProjectOwner,
   requireSupervisorAssignment,
   requireProjectAccess,
+  requireStudentAccess,
   requireWorkflow,
   getWorkflowContext,
   getProject,
   anyOf,
+  resolveProposalAccess,
 } from '../authz/index.js';
 import type { AuthUser } from '../middleware/auth.js';
 import {
@@ -232,6 +234,58 @@ async function main(): Promise<void> {
     await expectErr('approve already-approved → 422 business rule', wf({ status: 'approved' }, 'approve'), makeReq(sup, {}), BusinessRuleError, 422);
     await expectErr('missing resource → 404', wf(undefined, 'submit'), makeReq(owner, {}), NotFoundError, 404);
 
+    // ── §13.3 — proposal access resolves through student_id, never project_id.
+    // The proposal below deliberately has NO projectId: §8.3 makes it nullable
+    // exactly so a proposal can exist before its project. A project-keyed
+    // lookup would deny the assigned supervisor the document they must review.
+    console.log('== resolveProposalAccess (§13.3, student-scoped) ==');
+    {
+      const proposal = { studentId: ownerRow.id };
+      ck("owner → 'owner'", (await resolveProposalAccess(proposal, owner)) === 'owner');
+      ck(
+        "assigned supervisor → 'supervisor' with no project at all",
+        (await resolveProposalAccess(proposal, sup)) === 'supervisor',
+      );
+      ck('ended supervisor → null', (await resolveProposalAccess(proposal, supEnded)) === null);
+      ck('unassigned supervisor → null', (await resolveProposalAccess(proposal, outsider)) === null);
+      ck('other student → null', (await resolveProposalAccess(proposal, other)) === null);
+      ck("admin → 'admin'", (await resolveProposalAccess(proposal, admin)) === 'admin');
+    }
+
+    // ── §11 — /students/:studentId/supervisor. Keyed on the student, so it
+    // answers for a student who has no project yet, which the project-keyed
+    // guard structurally cannot.
+    console.log('== requireStudentAccess (student-scoped resource guard) ==');
+    const S = { studentId: ownerRow.id };
+    await expectPass('student self passes', requireStudentAccess(), makeReq(owner, S));
+    await expectPass('assigned supervisor passes', requireStudentAccess(), makeReq(sup, S));
+    await expectPass('admin passes', requireStudentAccess(), makeReq(admin, S));
+    await expectErr('other student → 403', requireStudentAccess(), makeReq(other, S), AuthorizationError, 403);
+    await expectErr('outsider supervisor → 403', requireStudentAccess(), makeReq(outsider, S), AuthorizationError, 403);
+    await expectErr('ended supervisor → 403', requireStudentAccess(), makeReq(supEnded, S), AuthorizationError, 403);
+    await expectErr('no user → 401', requireStudentAccess(), makeReq(undefined, S), AuthenticationError, 401);
+    await expectErr(
+      'unknown student → 404',
+      requireStudentAccess(),
+      makeReq(owner, { studentId: randomUUID() }),
+      NotFoundError,
+      404,
+    );
+    await expectErr(
+      'malformed id → 404, never reaches pg',
+      requireStudentAccess(),
+      makeReq(owner, { studentId: 'not-a-uuid' }),
+      NotFoundError,
+      404,
+    );
+    await expectErr(
+      'non-student id → 404 (no such student resource)',
+      requireStudentAccess(),
+      makeReq(admin, { studentId: supRow.id }),
+      NotFoundError,
+      404,
+    );
+
     console.log('== getProject ==');
     {
       const bare = makeReq(owner, P);
@@ -241,6 +295,49 @@ async function main(): Promise<void> {
       } catch (e) {
         ck('getProject without guard → 404', e instanceof NotFoundError);
       }
+    }
+    // ── I13 backstop. The service answers 409 before this can happen; the
+    // partial unique index is what stops a RACE that gets past that check, so
+    // prove the database itself refuses the second row.
+    console.log('== I13 backstop: idx_supervisor_assignments_active_student ==');
+    {
+      const { supervisorAssignments } = await import('../schema/index.js');
+      let code: unknown;
+      try {
+        await db.insert(supervisorAssignments).values({
+          studentId: ownerRow.id, // already has an ACTIVE row (supRow)
+          projectId: projectRow.id,
+          supervisorId: supEndedRow.id, // different supervisor, same student
+          isPrimary: true,
+        });
+        code = 'inserted';
+      } catch (e) {
+        code = (e as { code?: string }).code;
+      }
+      ck('second ACTIVE row for one student → 23505', code === '23505', `(got ${String(code)})`);
+
+      // The index is PARTIAL: history is unbounded, so an ended row must still
+      // be insertable. This is what keeps rehires working alongside the above.
+      let historyCode: unknown;
+      try {
+        const [historyRow] = await db
+          .insert(supervisorAssignments)
+          .values({
+            studentId: ownerRow.id,
+            projectId: projectRow.id,
+            supervisorId: supEndedRow.id,
+            isPrimary: false,
+            endedAt: new Date(),
+          })
+          .returning({ id: supervisorAssignments.id });
+        historyCode = 'inserted';
+        await db
+          .delete(supervisorAssignments)
+          .where(eq(supervisorAssignments.id, historyRow.id));
+      } catch (e) {
+        historyCode = (e as { code?: string }).code;
+      }
+      ck('an ENDED row for the same student is still allowed', historyCode === 'inserted', `(got ${String(historyCode)})`);
     }
   } finally {
     // ── Cleanup ──────────────────────────────────────────────────────────

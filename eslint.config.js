@@ -69,6 +69,54 @@ export default tseslint.config(
     },
   },
   {
+    // ADR-02 rule 1 — no reaching into another module's repository.
+    // Cross-module calls go through that module's service.ts, so repository.ts
+    // stays a private implementation detail and can change without ripple.
+    // Declared before the repository-specific block below so that one, which is
+    // more specific, can extend this rule instead of replacing it (ESLint gives
+    // the later matching config's value for the same rule key).
+    files: ['apps/api/src/modules/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['../*/repository.js', '../*/*/repository.js', '**/modules/*/repository.js'],
+              message:
+                "Cross-module calls go through the other module's service.ts, never its repository.ts (ADR-02).",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // ADR-02 rule 2 — repository.ts is Drizzle queries only (spec §9.3).
+    // Express types here would mean SQL leaking into HTTP concerns.
+    // Patterns from the block above are repeated because ESLint applies the
+    // last matching config's value for a given rule key, not a merge.
+    files: ['apps/api/src/modules/**/repository.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['../*/repository.js', '../*/*/repository.js', '**/modules/*/repository.js'],
+              message:
+                "Cross-module calls go through the other module's service.ts, never its repository.ts (ADR-02).",
+            },
+            {
+              group: ['express', 'express/*', 'express/**'],
+              message: 'repository.ts holds Drizzle queries only — no Express types (§9.3, ADR-02).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     rules: {
       // `declare global { namespace Express { … } }` is the standard
       // Express module-augmentation pattern — declarations only.

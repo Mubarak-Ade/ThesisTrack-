@@ -1,8 +1,13 @@
 import { Request, RequestHandler } from 'express';
 import { AuthorizationError, NotFoundError } from '../errors/index.js';
 import { asyncHandler } from '../lib/async-handler.js';
+import { isValidUuid } from '../lib/uuid.js';
 import { getProjectById } from '../modules/projects/service.js';
-import { getActiveAssignment } from '../modules/supervisor-assignments/service.js';
+import { findUserById } from '../modules/users/service.js';
+import {
+  getActiveAssignment,
+  getActiveAssignmentForStudent,
+} from '../modules/supervisor-assignments/service.js';
 import type { ProjectRow } from '../modules/projects/types.js';
 import { getProjectAccess } from './access.js';
 import { requireUser } from './guards.js';
@@ -92,6 +97,50 @@ export function requireProjectAccess(options: ProjectGuardOptions = {}): Request
     }
 
     next();
+  });
+}
+
+export interface StudentGuardOptions {
+  /** Route param holding the student id (default: 'studentId'). */
+  param?: string;
+}
+
+/**
+ * Layer 2 — resource authorization for `/students/:studentId/...` (§11).
+ *
+ *   administrator            → always
+ *   the student themself     → own record
+ *   that student's ACTIVE supervisor → assigned only
+ *   anyone else              → 403
+ *
+ * Keyed on `student_id` per §13.3 — never on a project, because a student may
+ * not have one yet. A `:studentId` that is not a student answers 404, matching
+ * the write paths, so the same id cannot read 404 and write 422.
+ */
+export function requireStudentAccess(options: StudentGuardOptions = {}): RequestHandler {
+  const param = options.param ?? 'studentId';
+
+  return asyncHandler(async (req, _res, next) => {
+    const user = requireUser(req); // 401 before any resource knowledge
+
+    const raw = req.params[param];
+    const studentId = typeof raw === 'string' ? raw : undefined;
+    // Malformed ids are refused before Postgres sees them → 404, same as unknown.
+    const student = studentId && isValidUuid(studentId) ? await findUserById(studentId) : undefined;
+    if (!student || student.role !== 'student') {
+      throw new NotFoundError('Student');
+    }
+
+    if (user.role === 'administrator' || student.id === user.id) {
+      return next();
+    }
+
+    const assignment = await getActiveAssignmentForStudent(student.id, user.id);
+    if (assignment) {
+      return next();
+    }
+
+    throw new AuthorizationError('You do not have access to this student');
   });
 }
 

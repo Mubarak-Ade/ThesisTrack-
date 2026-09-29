@@ -16,6 +16,7 @@ import {
   insertUsers,
   listUsers as listUsersRows,
   updateUser as updateUserRow,
+  updateUserPassword as updateUserPasswordRow,
   type UserPatch,
 } from './repository.js';
 import type { ImportUsersInput, ListUsersQuery, UpdateUserInput } from './schema.js';
@@ -56,6 +57,19 @@ export function findUserByEmail(email: string): Promise<UserRow | undefined> {
 
 export function findUserById(userId: string): Promise<UserRow | undefined> {
   return findUserByIdRow(userId);
+}
+
+/**
+ * Password write used by the auth module's activation and password-reset
+ * flows. Exposed here so those flows never reach into this module's
+ * `repository.ts` (ADR-02 — cross-module calls go through `service.ts`).
+ */
+export function updateUserPassword(
+  userId: string,
+  passwordHash: string,
+  options: { activate?: boolean } = {},
+): Promise<UserRow | undefined> {
+  return updateUserPasswordRow(userId, passwordHash, options);
 }
 
 /**

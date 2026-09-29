@@ -8,10 +8,11 @@ import {
   ValidationError,
 } from '../../errors/index.js';
 import { generateToken, hashToken } from '../../lib/tokens.js';
-import {
-  updateUserPassword,
-  findUserByEmail as findUserByEmailRow,
-} from '../users/repository.js';
+// Cross-module calls go through users/service.ts (ADR-02), never its repository.
+// This completes an auth ↔ users cycle; both sides call into each other from
+// inside function bodies and all involved exports are hoisted declarations, so
+// module evaluation order is irrelevant.
+import { findUserByEmail as findUserByEmailRow, updateUserPassword } from '../users/service.js';
 import type { UserRow } from '../users/types.js';
 import {
   consumeAccountTokenIfUnused,

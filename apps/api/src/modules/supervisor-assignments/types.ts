@@ -30,3 +30,20 @@ export interface AssignmentOverview {
   /** Ended relationships, most recent first — the preserved history. */
   history: AssignmentView[];
 }
+
+/**
+ * One row of a supervisor's caseload (`GET /supervisors/me/students`).
+ *
+ * There is deliberately no "active: false" member: the endpoint returns active
+ * rows only, and **one row per student** — I13 makes dedup unnecessary, N
+ * students simply yield N rows.
+ */
+export interface CaseloadEntry {
+  /** The assignment row's id. */
+  id: string;
+  /** Null while the student's assignment predates their project (ADR-13). */
+  projectId: string | null;
+  assignedAt: Date;
+  isPrimary: boolean;
+  student: PublicUser;
+}

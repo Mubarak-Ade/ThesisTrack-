@@ -7,6 +7,13 @@ export const assignmentParamsSchema = z.object({
 
 export type AssignmentParams = z.infer<typeof assignmentParamsSchema>;
 
+/** `/students/:studentId/supervisor` path parameters. */
+export const studentAssignmentParamsSchema = z.object({
+  studentId: z.string().uuid('Invalid student id'),
+});
+
+export type StudentAssignmentParams = z.infer<typeof studentAssignmentParamsSchema>;
+
 /**
  * POST/PATCH body. No isPrimary: under the MVP single-active model the
  * active assignment is by definition the primary one.
