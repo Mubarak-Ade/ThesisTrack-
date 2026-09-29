@@ -1,3 +1,9 @@
 node_modules
 dist
 pnpm-lock.yaml
+
+# Never staged (see plan "Ground rules") — formatting them is pointless churn.
+package-lock.json
+pnpm-workspace.yaml
+.shots-review
+*.tsbuildinfo

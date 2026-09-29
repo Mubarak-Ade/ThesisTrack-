@@ -3,7 +3,7 @@ import { cleanEnv, str, port, url, num, bool } from 'envalid';
 
 export const env = cleanEnv(process.env, {
   NODE_ENV: str({ choices: ['development', 'production', 'test'], default: 'development' }),
-  PORT: port({ default: 5000 }),
+  PORT: port({ default: 3001 }), // spec §18.4; vite proxy and all four bash suites assume it
   DATABASE_URL: url(),
   WEB_ORIGIN: str({ default: 'http://localhost:5173' }),
 
