@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError, ValidationError } from '../errors/index.js';
+import { MulterError } from 'multer';
+import { AppError, BusinessRuleError, ValidationError } from '../errors/index.js';
+import { env } from '../config/env.js';
 import { respondError, ErrorResponse } from '../lib/response.js';
 
 /**
@@ -55,6 +57,20 @@ function normalizeError(err: unknown): AppError | undefined {
         { path: '', message: 'Payload exceeds the configured size limit' },
       ]);
     }
+  }
+
+  // Multer failures reach the central handler like body-parser's: the size
+  // limit is a §14.4 business rule (422), anything else is request shape (400).
+  if (err instanceof MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return new BusinessRuleError(
+        `File exceeds the maximum upload size (${env.UPLOAD_MAX_BYTES} bytes)`,
+        [{ path: 'file', message: `Limit: ${env.UPLOAD_MAX_BYTES} bytes` }],
+      );
+    }
+    return new ValidationError('Invalid file upload', [
+      { path: 'file', message: err.message },
+    ]);
   }
 
   return undefined;

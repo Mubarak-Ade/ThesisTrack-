@@ -20,4 +20,10 @@ export const env = cleanEnv(process.env, {
   // Refresh cookie: HTTP-only, SameSite=Lax, path-scoped to /api/v1/auth.
   // Set to true when serving over HTTPS.
   COOKIE_SECURE: bool({ default: false }),
+
+  // Document storage (spec §14, §18.6) — local disk under apps/api, never
+  // served statically: every byte leaves through an authorization-checked
+  // download route (ADR-09, §14.5).
+  UPLOAD_DIR: str({ default: './uploads' }),
+  UPLOAD_MAX_BYTES: num({ default: 20971520 }), // 20 MB (§14.4)
 });

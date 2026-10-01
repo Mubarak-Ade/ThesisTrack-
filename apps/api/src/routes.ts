@@ -5,6 +5,7 @@ import { routes as authRoutes } from './modules/auth/index.js';
 import { routes as usersRoutes } from './modules/users/index.js';
 import { routes as projectsRoutes } from './modules/projects/index.js';
 import { routes as supervisorAssignmentsRoutes } from './modules/supervisor-assignments/index.js';
+import { routes as proposalsRoutes } from './modules/proposals/index.js';
 
 /**
  * Central route composition. `app.ts` only ever sees a single `/api/v1`
@@ -16,6 +17,7 @@ import { routes as supervisorAssignmentsRoutes } from './modules/supervisor-assi
  *   /api/v1/users     →  modules/users
  *   /api/v1/projects  →  modules/projects
  *   /api/v1/projects/:id/supervisor → modules/supervisor-assignments
+ *   /api/v1/proposals/… + /api/v1/proposal-attachments/… → modules/proposals
  */
 export const routes = Router();
 
@@ -25,6 +27,7 @@ api.use('/auth', authRoutes);
 api.use(usersRoutes);
 api.use(projectsRoutes);
 api.use(supervisorAssignmentsRoutes);
+api.use(proposalsRoutes);
 
 routes.use('/api/v1', api);
 

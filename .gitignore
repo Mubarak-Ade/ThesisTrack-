@@ -10,3 +10,6 @@ coverage/
 
 # Internal engineering documents (specs, plans) — kept on disk, never pushed
 docs/
+
+# Runtime file storage (ADR-09) — local disk, never committed
+apps/api/uploads/
