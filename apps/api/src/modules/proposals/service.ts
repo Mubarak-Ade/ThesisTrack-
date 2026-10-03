@@ -9,6 +9,7 @@ import {
   NotFoundError,
   ValidationError,
 } from '../../errors/index.js';
+import { notify } from '../../lib/notify.js';
 import type { Role } from '../../lib/roles.js';
 import { htmlToText, sanitizeProposalBody } from '../../lib/sanitize.js';
 import { removeFileQuietly, resolveStorageKey, UPLOADS_ROOT } from '../../lib/storage.js';
@@ -20,6 +21,13 @@ import {
   getCaseload,
 } from '../supervisor-assignments/service.js';
 import { findUserById, toPublicUser } from '../users/service.js';
+import {
+  buildStageSnapshotValues,
+  evaluateGates,
+  loadWorkflowStages,
+  resolveWorkflowForProject,
+  stageHasAnyGate,
+} from '../workflows/service.js';
 import type {
   CreateProposalInput,
   ListProposalsQuery,
@@ -290,10 +298,30 @@ export async function submitProposal(proposal: ProposalRow): Promise<ProposalVie
     throw new BusinessRuleError('Add a document or write your proposal before submitting.');
   }
 
-  const updated = await repo.markSubmitted(proposal.id);
-  if (!updated) {
-    throw transitionRace('submit', proposal.status);
-  }
+  // §15.2 "Proposal submitted → assigned supervisor" (§15.4: the recipient is
+  // resolved before the unit, the row is written inside it).
+  const assignment = await repo.findActiveAssignmentByStudent(proposal.studentId);
+
+  const updated = await db.transaction(async (tx) => {
+    const row = await repo.markSubmitted(proposal.id, tx);
+    if (!row) {
+      throw transitionRace('submit', proposal.status); // concurrent transition
+    }
+    if (assignment) {
+      await notify(
+        {
+          userId: assignment.supervisorId,
+          type: 'proposal',
+          title: 'Proposal submitted',
+          message: `A proposal you supervise, "${proposal.title}", has been submitted for review.`,
+          resourceType: 'proposal',
+          resourceId: proposal.id,
+        },
+        tx,
+      );
+    }
+    return row;
+  });
   return toView(await loadDetail(updated.id));
 }
 
@@ -316,14 +344,20 @@ export interface ReviewResult {
 /**
  * POST /proposals/:proposalId/review (§5.4, §11.3).
  *
- * `approved` runs steps 1–6 in ONE `db.transaction` — project insert,
+ * `approved` runs steps 1–7 in ONE `db.transaction` — project insert,
  * `proposal.project_id` back-fill, `assignment.project_id` back-fill,
- * milestone materialisation, notifications (in the same transaction, §15.4),
- * and the append-only review row. Any failure rolls the whole unit back.
+ * milestone materialisation, workflow resolution + stage materialisation
+ * (§5.4 step 5, ADR-16 → ADR-15 snapshot, with §5.9 automatic advancement),
+ * notifications (in the same transaction, §15.4), and the append-only review
+ * row. Any failure rolls the whole unit back.
  *
- * Template resolution: explicit `templateId` → seeded `Default` by name →
- * none. Approval therefore never fails because template data is missing;
- * only an explicit unknown id is a request error (400, path `templateId`).
+ * Two resolutions run before the transaction, both reads:
+ *   - template:   explicit `templateId` → seeded `Default` by name → none.
+ *   - workflow:   ADR-16 — active workflow matching the student's program →
+ *                 the flagged default → none (zero stages).
+ * Approval therefore never fails because template or workflow data is
+ * missing; only an explicit unknown id is a request error (400, path
+ * `templateId`).
  */
 export async function reviewProposal(
   proposal: ProposalRow,
@@ -364,6 +398,23 @@ export async function reviewProposal(
       if (!row) {
         throw transitionRace('review', proposal.status); // aborts the insert above
       }
+      // §15.2: revision requested / rejected → the student, same transaction
+      // (§15.4). The student is proposal.studentId — the author of the work.
+      await notify(
+        {
+          userId: proposal.studentId,
+          type: 'proposal',
+          title:
+            input.decision === 'revision_required' ? 'Revision requested' : 'Proposal rejected',
+          message:
+            input.decision === 'revision_required'
+              ? `Your proposal "${proposal.title}" needs revisions — see the reviewer's comment.`
+              : `Your proposal "${proposal.title}" has been rejected.`,
+          resourceType: 'proposal',
+          resourceId: proposal.id,
+        },
+        tx,
+      );
       return { row, review };
     });
     return {
@@ -373,7 +424,7 @@ export async function reviewProposal(
     };
   }
 
-  /* ---- approved: §5.4 steps 1–6, one transaction ---- */
+  /* ---- approved: §5.4 steps 1–7, one transaction ---- */
 
   // I1 (§8.4): a student may hold only one ACTIVE project. Pre-check for a
   // clean 409; the partial unique index remains the race backstop below.
@@ -386,6 +437,14 @@ export async function reviewProposal(
   template ??= await repo.findTemplateByName('Default');
   const assignment = await repo.findActiveAssignmentByStudent(proposal.studentId);
 
+  // §5.4 step 5 prep — ADR-16 workflow resolution, read BEFORE the tx like
+  // the template and assignment above: program match → flagged default →
+  // none. A missing program or no matching workflow simply yields zero
+  // stages; approval never fails on workflow data (§3.4, ADR-16).
+  const student = await findUserById(proposal.studentId);
+  const workflow = await resolveWorkflowForProject(null, student?.program ?? null);
+  const workflowStages = workflow ? await loadWorkflowStages(workflow.id) : [];
+
   let outcome: { project: ProjectRow; review: ReviewRow };
   try {
     outcome = await db.transaction(async (tx) => {
@@ -396,6 +455,7 @@ export async function reviewProposal(
           title: proposal.title,
           description: proposal.abstract,
           status: 'active',
+          workflowId: workflow?.id ?? null, // §5.4 step 5's resolution, recorded
         },
         tx,
       );
@@ -428,9 +488,40 @@ export async function reviewProposal(
         );
       }
 
-      // 5. Notifications, same transaction (§15.4): the student always, the
+      // 5. Resolve workflow → materialise project stages, stage 1 → active
+      //    (ADR-15 frozen snapshot: every field copied, §8.11). §5.9
+      //    automatic advancement: when the materialised stage 1 gates on
+      //    approval, THIS approval is what satisfies it, so the same
+      //    transaction completes it and activates stage 2. The gate facts
+      //    are KNOWN, not queried — the project is brand new inside this
+      //    transaction (no submissions can exist) and step 2 already set
+      //    proposals.status = 'approved'. No resolved workflow → zero
+      //    stages, never a failure (§3.4).
+      if (workflowStages.length > 0) {
+        await repo.insertProjectStages(
+          buildStageSnapshotValues(workflowStages, project.id, reviewerId),
+          tx,
+        );
+        const first = workflowStages[0];
+        // Vacuous gates do NOT auto-advance: an ungated stage is the
+        // supervisor's to move. Only a stage whose conditions this approval
+        // actually satisfies completes here (§5.9).
+        if (stageHasAnyGate(first)) {
+          const unmet = evaluateGates(first, {
+            proposalApproved: true,
+            submissionInWindow: false,
+            reviewedSubmissionInWindow: false,
+            approvedReviewedSubmissionInWindow: false,
+          });
+          if (unmet.length === 0) {
+            await repo.autoAdvanceFirstStage(project.id, reviewerId, tx);
+          }
+        }
+      }
+
+      // 6. Notifications, same transaction (§15.4): the student always, the
       //    assigned supervisor when one exists (§15.2 — proposal approved).
-      await repo.insertNotification(
+      await notify(
         {
           userId: proposal.studentId,
           type: 'proposal',
@@ -442,7 +533,7 @@ export async function reviewProposal(
         tx,
       );
       if (assignment) {
-        await repo.insertNotification(
+        await notify(
           {
             userId: assignment.supervisorId,
             type: 'proposal',
@@ -455,7 +546,7 @@ export async function reviewProposal(
         );
       }
 
-      // 6. The append-only review row (§12 I8).
+      // 7. The append-only review row (§12 I8).
       const review = await repo.insertReview(reviewRow, tx);
       return { project, review };
     });

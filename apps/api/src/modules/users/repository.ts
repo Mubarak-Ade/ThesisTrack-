@@ -13,7 +13,10 @@ export type InsertExecutor = Pick<typeof db, 'insert'>;
 
 /** Fields PATCH /users/:userId may write (no email — identity field). */
 export type UserPatch = Partial<
-  Pick<typeof users.$inferInsert, 'firstName' | 'lastName' | 'role' | 'isActive' | 'registrationNumber'>
+  Pick<
+    typeof users.$inferInsert,
+    'firstName' | 'lastName' | 'role' | 'isActive' | 'registrationNumber' | 'program'
+  >
 >;
 
 export async function findUserByEmail(email: string): Promise<UserRow | undefined> {

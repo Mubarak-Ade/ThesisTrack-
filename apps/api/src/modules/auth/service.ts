@@ -8,6 +8,7 @@ import {
   ValidationError,
 } from '../../errors/index.js';
 import { generateToken, hashToken } from '../../lib/tokens.js';
+import { purgeExpiredIdempotencyKeys } from '../../middleware/idempotency.js';
 // Cross-module calls go through users/service.ts (ADR-02), never its repository.
 // This completes an auth ↔ users cycle; both sides call into each other from
 // inside function bodies and all involved exports are hoisted declarations, so
@@ -83,6 +84,8 @@ export async function login(
   }
 
   await purgeExpiredSessions(); // opportunistic cleanup of expired sessions
+  // §11.12's `expires_at` sweep rides along (plan 8.3 — no new scheduler).
+  await purgeExpiredIdempotencyKeys();
 
   const session = await createSession(user.id);
   return { user, session };

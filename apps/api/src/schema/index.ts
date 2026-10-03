@@ -13,6 +13,9 @@ export { reviews, reviewsRelations } from './reviews.js';
 export { feedback, feedbackRelations } from './feedback.js';
 export { notifications, notificationsRelations } from './notifications.js';
 export { idempotencyKeys, idempotencyKeysRelations } from './idempotency-keys.js';
+export { workflows, workflowsRelations } from './workflows.js';
+export { workflowStages, workflowStagesRelations } from './workflow-stages.js';
+export { projectStages, projectStagesRelations } from './project-stages.js';
 
 export {
   userRoleEnum,
@@ -23,4 +26,5 @@ export {
   notificationTypeEnum,
   milestoneStatusEnum,
   accountTokenTypeEnum,
+  projectStageStatusEnum,
 } from './enums.js';

@@ -21,6 +21,7 @@
     "db:migrate": "pnpm --filter @thesistrack/api db:migrate",
     "db:push": "pnpm --filter @thesistrack/api db:push",
     "db:drift": "pnpm --filter @thesistrack/api db:drift",
-    "db:studio": "pnpm --filter @thesistrack/api db:studio"
+    "db:studio": "pnpm --filter @thesistrack/api db:studio",
+    "seed:workflows": "pnpm --filter @thesistrack/api seed:workflows"
   }
 }

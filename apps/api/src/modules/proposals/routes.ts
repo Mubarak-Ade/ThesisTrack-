@@ -7,6 +7,7 @@ import {
   requireWorkflow,
 } from '../../authz/index.js';
 import { uploadProposalDocument } from '../../lib/storage.js';
+import { idempotency } from '../../middleware/idempotency.js';
 import { validate } from '../../middleware/validate.js';
 import * as controller from './controller.js';
 import {
@@ -75,7 +76,14 @@ router.get(
 
 /* --------------------------------------------------------------- writes */
 
-router.post('/proposals', requireRole('student'), validate(createProposalSchema), controller.create);
+// §11.12 — Idempotency-Key honoured here (validated body is the hash input).
+router.post(
+  '/proposals',
+  requireRole('student'),
+  validate(createProposalSchema),
+  idempotency,
+  controller.create,
+);
 
 router.patch(
   '/proposals/:proposalId',

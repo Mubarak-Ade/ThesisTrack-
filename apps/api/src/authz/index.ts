@@ -28,5 +28,8 @@ export * from './guards.js';
 export * from './compose.js';
 export * from './access.js';
 export * from './proposal-access.js';
+export * from './milestone-access.js';
+export * from './submission-access.js';
+export * from './feedback-access.js';
 export * from './resource.js';
 export * from './workflow.js';

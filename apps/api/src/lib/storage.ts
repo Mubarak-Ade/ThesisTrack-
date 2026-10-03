@@ -54,6 +54,9 @@ function extensionFor(mimeType: string): string {
   return MIME_EXTENSIONS[mimeType] ?? '.bin'; // unreachable via fileFilter
 }
 
+/** Public alias for the submissions service — same MIME→ext table (§14.4). */
+export const extensionForMime = extensionFor;
+
 const proposalStorage = multer.diskStorage({
   destination: (req, _file, cb) => {
     const proposalId = typeof req.params.proposalId === 'string' ? req.params.proposalId : '';
@@ -111,6 +114,29 @@ const uploadSingle = multer({
 }).single('file');
 
 /**
+ * Staging destination for submission uploads (§14.4): a constant server-side
+ * directory, no client input anywhere. The real path is assembled by the
+ * service once the row — and therefore the id and version number — exists.
+ */
+const submissionTempStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const dir = path.join(UPLOADS_ROOT, 'tmp');
+    fs.mkdir(dir, { recursive: true }, (err) => {
+      if (err) {
+        cb(err, '');
+        return;
+      }
+      cb(null, dir);
+    });
+  },
+  filename: (req, _file, cb) => {
+    const name = `${randomUUID()}.part`;
+    req.uploadTempPath = path.join(UPLOADS_ROOT, 'tmp', name);
+    cb(null, name);
+  },
+});
+
+/**
  * Uploads whose row exists — their bytes belong to the database now and must
  * not be unlinked by the failure/abort cleanup below.
  */
@@ -147,6 +173,45 @@ export function uploadProposalDocument(req: Request, res: Response, next: NextFu
   });
 }
 
+const uploadSubmissionSingle = multer({
+  storage: submissionTempStorage,
+  limits: { fileSize: env.UPLOAD_MAX_BYTES },
+  fileFilter,
+}).single('file');
+
+/**
+ * Submission uploads (§14.4) — same rules as the proposal one (server-derived
+ * name, MIME gate, size cap, temp cleanup on error and on request abort), but
+ * staged into `uploads/tmp/` instead of the final directory:
+ *
+ *   * `POST /submissions` has **no** ids yet — the submission id is chosen by
+ *     the server when the row is inserted, and §14.3's
+ *     `uploads/<projectId>/<submissionId>/v<N>-<uuid>.<ext>` needs both;
+ *   * `POST …/versions` has the ids but not `N`, which is `max + 1` and only
+ *     known at insert time (I7's unique constraint decides the real value).
+ *
+ * The service `rename`s a staged file into place once its row exists — bytes
+ * never land without a row, and a row is never written for bytes that could
+ * not be placed. Nothing about the final path comes from the client: both ids
+ * are UUIDs the server chose and the extension comes from the MIME map.
+ */
+export function uploadSubmissionFile(req: Request, res: Response, next: NextFunction): void {
+  res.on('close', () => {
+    const pending = req.uploadTempPath;
+    if (pending && !committedUploads.has(req)) {
+      void removeFileQuietly(pending);
+    }
+  });
+
+  uploadSubmissionSingle(req, res, (err) => {
+    if (err) {
+      next(err);
+      return;
+    }
+    next();
+  });
+}
+
 /** Best-effort unlink: a missing file is the happy case for cleanup paths. */
 export async function removeFileQuietly(absolutePath: string): Promise<void> {
   try {
@@ -154,6 +219,22 @@ export async function removeFileQuietly(absolutePath: string): Promise<void> {
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
       console.error(`[uploads] failed to remove ${absolutePath}`, err);
+    }
+  }
+}
+
+/**
+ * Best-effort rmdir for the per-submission directory §14.3 lays out. A
+ * directory that still holds another version (`ENOTEMPTY`) or is already gone
+ * (`ENOENT`) is the expected outcome — neither is an error worth logging.
+ */
+export async function removeEmptyDirQuietly(absolutePath: string): Promise<void> {
+  try {
+    await fs.promises.rmdir(absolutePath);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT' && code !== 'ENOTEMPTY' && code !== 'EEXIST') {
+      console.error(`[uploads] failed to remove directory ${absolutePath}`, err);
     }
   }
 }

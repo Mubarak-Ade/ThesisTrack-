@@ -19,6 +19,8 @@ export interface PublicUser {
   role: Role;
   isActive: boolean;
   registrationNumber: string | null;
+  /** §8.7 — ADR-16's workflow auto-match key; NULL = unaffiliated. */
+  program: string | null;
   status: UserStatus;
   createdAt: Date;
 }
@@ -28,6 +30,8 @@ export interface ProvisionInput {
   lastName: string;
   email: string;
   role: Role;
+  /** §11.0.2 PROPOSED delta — optional, trimmed ≤255, nullable. */
+  program?: string | null;
 }
 
 /** Fresh activation token issued for an (inactive) account. */

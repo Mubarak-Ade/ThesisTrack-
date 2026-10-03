@@ -46,6 +46,7 @@ export function toPublicUser(row: UserRow): PublicUser {
     role: row.role as PublicUser['role'],
     isActive: row.isActive,
     registrationNumber: row.registrationNumber,
+    program: row.program,
     status: deriveStatus(row),
     createdAt: row.createdAt,
   };
@@ -99,6 +100,7 @@ export async function provisionUser(input: ProvisionInput): Promise<ProvisionedA
       lastName: input.lastName,
       email: input.email.toLowerCase(),
       role: input.role,
+      program: input.program ?? null, // §11.0.2 delta — fresh accounts only
       passwordHash: null, // set during activation
       isActive: false, // INVITED
     });
@@ -178,6 +180,7 @@ export async function updateUser(
   if (input.role !== undefined) fields.role = input.role;
   if (input.isActive !== undefined) fields.isActive = input.isActive;
   if (input.registrationNumber !== undefined) fields.registrationNumber = input.registrationNumber;
+  if (input.program !== undefined) fields.program = input.program; // null clears it
 
   const updated = await updateUserRow(userId, fields);
   if (!updated) {
@@ -252,6 +255,7 @@ export async function importUsers(input: ImportUsersInput): Promise<ImportResult
         lastName: user.lastName,
         email: user.email,
         role: user.role,
+        program: user.program ?? null, // §11.0.2 delta — per row
         passwordHash: null, // set during activation
         isActive: false, // INVITED
       })),

@@ -4,9 +4,9 @@ import { db } from '../../config/db.js';
 import {
   milestoneTemplates,
   milestones,
-  notifications,
   proposalAttachments,
   proposals,
+  projectStages,
   projects,
   reviews,
   supervisorAssignments,
@@ -26,7 +26,7 @@ import type {
  * Drizzle queries only — no Express, no business rules (§9.3, ADR-02).
  *
  * Rows of OTHER modules' tables (`projects`, `supervisor_assignments`,
- * `milestone_templates`, `notifications`) are queried here because §5.4's
+ * `milestone_templates`) are queried here because §5.4's
  * approval transaction must touch them **inside one transaction**; importing
  * those modules' `repository.ts` is what ADR-02 forbids, and shared schema
  * tables are data, not behavior.
@@ -302,12 +302,56 @@ export async function insertMilestones(
   await executor.insert(milestones).values(values);
 }
 
-/** §5.4 step 5 — notifications written in the same transaction (§15.4). */
-export async function insertNotification(
-  values: typeof notifications.$inferInsert,
+/**
+ * §5.4 step 5 — the ADR-15 stage snapshot (§8.11): every descriptive and
+ * gating field COPIED from the definition, stage 1 already `active` (§5.9).
+ * Empty set is a no-op: no resolved workflow → zero stages, never a failure
+ * (§3.4). Lives in THIS repository because §5.4's transaction must touch it
+ * inside this unit — ADR-02 forbids importing another module's repository,
+ * and shared schema tables are data, not behavior (§5.4 note).
+ */
+export async function insertProjectStages(
+  values: Array<typeof projectStages.$inferInsert>,
   executor: WriteExecutor = db,
 ): Promise<void> {
-  await executor.insert(notifications).values(values);
+  if (values.length === 0) return;
+  await executor.insert(projectStages).values(values);
+}
+
+/**
+ * §5.9 automatic advancement — the second half of step 5: an approval-gated
+ * stage 1 is satisfied by THIS approval (step 2 flipped the proposal), so the
+ * same transaction completes it and activates stage 2 rather than leaving the
+ * supervisor to click through a stage the approval itself already finished.
+ * Both UPDATEs are conditional; no stage 2 row (single-stage workflow) means
+ * the tracker legitimately ends with ZERO active stages (I16: *at most* one).
+ */
+export async function autoAdvanceFirstStage(
+  projectId: string,
+  actorId: string,
+  executor: WriteExecutor = db,
+): Promise<void> {
+  const now = new Date();
+  await executor
+    .update(projectStages)
+    .set({ status: 'completed', completedAt: now, completedBy: actorId })
+    .where(
+      and(
+        eq(projectStages.projectId, projectId),
+        eq(projectStages.position, 1),
+        eq(projectStages.status, 'active'),
+      ),
+    );
+  await executor
+    .update(projectStages)
+    .set({ status: 'active', startedAt: now, startedBy: actorId })
+    .where(
+      and(
+        eq(projectStages.projectId, projectId),
+        eq(projectStages.position, 2),
+        eq(projectStages.status, 'pending'),
+      ),
+    );
 }
 
 export async function insertReview(

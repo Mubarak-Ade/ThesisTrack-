@@ -51,3 +51,14 @@ export const milestoneStatusEnum = pgEnum('milestone_status', [
 ]);
 
 export const accountTokenTypeEnum = pgEnum('account_token_type', ['activation', 'password_reset']);
+
+// §8.9 (2026-10-02 requirements change, FR-CW) — the three states of a
+// materialised project stage. The partial unique index on
+// project_stages(project_id) WHERE status='active' pins at most one 'active'
+// row per project (I16); zero active rows is legal once the final stage
+// completes. There is deliberately no 'rolled back' member (I17).
+export const projectStageStatusEnum = pgEnum('project_stage_status', [
+  'pending',
+  'active',
+  'completed',
+]);

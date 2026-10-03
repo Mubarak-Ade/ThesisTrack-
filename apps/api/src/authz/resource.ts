@@ -27,12 +27,19 @@ declare global {
 export interface ProjectGuardOptions {
   /** Route param holding the project id (default: 'projectId'). */
   param?: string;
+  /**
+   * Where the id lives (default: `'params'`). `'body'` serves the routes that
+   * name a project in the request body (`POST /submissions`), which reach
+   * `validate(body)` first, so the value is already a validated UUID.
+   */
+  source?: 'params' | 'body';
 }
 
-async function loadProject(req: Request, param: string): Promise<ProjectRow> {
+async function loadProject(req: Request, param: string, source: 'params' | 'body'): Promise<ProjectRow> {
   requireUser(req); //401 before any resource knowledge
 
-  const raw = req.params[param];
+  const container = source === 'body' ? req.body : req.params;
+  const raw = typeof container === 'object' && container !== null ? container[param] : undefined;
   const id = typeof raw === 'string' ? raw : undefined;
   const project = id ? await getProjectById(id) : undefined;
   if (!project) {
@@ -50,10 +57,11 @@ async function loadProject(req: Request, param: string): Promise<ProjectRow> {
  */
 export function requireProjectOwner(options: ProjectGuardOptions = {}): RequestHandler {
   const param = options.param ?? 'projectId';
+  const source = options.source ?? 'params';
 
   return asyncHandler(async (req, _res, next) => {
     const user = requireUser(req);
-    const project = await loadProject(req, param);
+    const project = await loadProject(req, param, source);
 
     if (project.studentId !== user.id) {
       throw new AuthorizationError('You can only access your own project');
@@ -66,10 +74,11 @@ export function requireProjectOwner(options: ProjectGuardOptions = {}): RequestH
 /** Layer 2 — resource authorization: *assigned* projects only (active assignments). */
 export function requireSupervisorAssignment(options: ProjectGuardOptions = {}): RequestHandler {
   const param = options.param ?? 'projectId';
+  const source = options.source ?? 'params';
 
   return asyncHandler(async (req, _res, next) => {
     const user = requireUser(req);
-    const project = await loadProject(req, param);
+    const project = await loadProject(req, param, source);
 
     const assignment = await getActiveAssignment(project.id, user.id);
     if (!assignment) {
@@ -86,10 +95,11 @@ export function requireSupervisorAssignment(options: ProjectGuardOptions = {}): 
  */
 export function requireProjectAccess(options: ProjectGuardOptions = {}): RequestHandler {
   const param = options.param ?? 'projectId';
+  const source = options.source ?? 'params';
 
   return asyncHandler(async (req, _res, next) => {
     const user = requireUser(req);
-    const project = await loadProject(req, param);
+    const project = await loadProject(req, param, source);
 
     const access = await getProjectAccess(user, project);
     if (access === null) {

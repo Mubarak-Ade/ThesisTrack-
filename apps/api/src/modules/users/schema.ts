@@ -12,6 +12,8 @@ export const createUserSchema = z.object({
   lastName: z.string().trim().min(1).max(255),
   email: z.string().trim().toLowerCase().email().max(255),
   role: z.enum(ROLES).default('student'),
+  // §11.0.2 PROPOSED delta — optional; NULL = unaffiliated (ADR-16 fallback).
+  program: z.string().trim().max(255).nullable().optional(),
 });
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
@@ -53,6 +55,8 @@ export const updateUserSchema = z
     role: z.enum(ROLES),
     isActive: z.boolean(),
     registrationNumber: z.string().trim().min(1).max(32).nullable(),
+    // §11.0.2 PROPOSED delta — patch sets AND clears (null = unaffiliated).
+    program: z.string().trim().max(255).nullable(),
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, {

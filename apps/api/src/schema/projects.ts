@@ -14,6 +14,12 @@ export const projects = pgTable(
     // NOT NULL matches the create contract (§11.7) — every project carries one.
     description: text('description').notNull(),
     status: projectStatusEnum('status').notNull().default('active'),
+    // §3.4 (ADR-16) — the project's workflow, resolved at creation/approval:
+    // explicit workflowId (admin) -> active workflow matching the student's
+    // program -> the flagged default -> none. NULL is legal (zero stages) —
+    // approval never fails on workflow data. RESTRICT: a definition that
+    // produced project stages is academic history (I15), archive it instead.
+    workflowId: uuid('workflow_id').references(() => workflows.id, { onDelete: 'restrict' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -34,9 +40,14 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
     fields: [projects.studentId],
     references: [users.id],
   }),
+  workflow: one(workflows, {
+    fields: [projects.workflowId],
+    references: [workflows.id],
+  }),
   proposals: many(proposals),
   supervisorAssignments: many(supervisorAssignments),
   milestones: many(milestones),
+  projectStages: many(projectStages),
   submissions: many(submissions),
   feedback: many(feedback),
 }));
@@ -46,3 +57,5 @@ import { supervisorAssignments } from './supervisor-assignments.js';
 import { milestones } from './milestones.js';
 import { submissions } from './submissions.js';
 import { feedback } from './feedback.js';
+import { workflows } from './workflows.js';
+import { projectStages } from './project-stages.js';

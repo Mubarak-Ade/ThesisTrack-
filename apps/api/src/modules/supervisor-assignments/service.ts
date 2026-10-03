@@ -6,6 +6,7 @@ import {
   ValidationError,
 } from '../../errors/index.js';
 import { db } from '../../config/db.js';
+import { notify } from '../../lib/notify.js';
 import { getProjectById } from '../projects/service.js';
 import { findUserById, toPublicUser } from '../users/service.js';
 import { projects } from '../../schema/index.js';
@@ -71,6 +72,21 @@ function toView(
     assignedBy: row.assignedBy,
     supervisor: toPublicUser(supervisor),
   };
+}
+
+/**
+ * §15.2 recipient resolution — the student's active supervisor, or null.
+ *
+ * A **service-level** read: ADR-02 lets modules import each other's *services*
+ * (never their repositories), so submissions, reviews, feedback and milestones
+ * can resolve this counterparty **before** their transaction and write the
+ * state change and its notification as one unit (§15.4).
+ */
+export async function findActiveSupervisorIdForStudent(
+  studentId: string,
+): Promise<string | null> {
+  const row = await findActiveAssignmentForStudent(studentId);
+  return row?.supervisorId ?? null;
 }
 
 /** GET — the active relationship plus the preserved history, side by side. */
@@ -232,14 +248,44 @@ export async function assignToStudent(
   const supervisor = await validateTargetSupervisor(supervisorId);
 
   try {
-    const row = await insertAssignment({
-      studentId,
-      projectId,
-      supervisorId,
-      isPrimary: true, // the single active assignment IS the primary
-      assignedBy: actorId,
+    const created = await db.transaction(async (tx) => {
+      const row = await insertAssignment(
+        {
+          studentId,
+          projectId,
+          supervisorId,
+          isPrimary: true, // the single active assignment IS the primary
+          assignedBy: actorId,
+        },
+        tx,
+      );
+      // §15.2 "Supervisor assigned → student + supervisor", written in the
+      // assignment's own transaction (§15.4): both rows or neither.
+      await notify(
+        {
+          userId: studentId,
+          type: 'assignment',
+          title: 'Supervisor assigned',
+          message: `You have been assigned ${supervisor.firstName} ${supervisor.lastName} as your supervisor.`,
+          resourceType: 'assignment',
+          resourceId: row.id,
+        },
+        tx,
+      );
+      await notify(
+        {
+          userId: supervisorId,
+          type: 'assignment',
+          title: 'Supervisor assigned',
+          message: 'A student has been assigned to you for supervision.',
+          resourceType: 'assignment',
+          resourceId: row.id,
+        },
+        tx,
+      );
+      return row;
     });
-    return toView(row, supervisor);
+    return toView(created, supervisor);
   } catch (err) {
     if (isUniqueViolation(err)) {
       throw new ConflictError(ACTIVE_EXISTS); // lost the race — same truth
@@ -297,7 +343,7 @@ export async function changeSupervisorForStudent(
       if (!ended) {
         return undefined;
       }
-      return insertAssignment(
+      const row = await insertAssignment(
         {
           studentId,
           // Keep the project the row already had unless the caller pinned one.
@@ -308,6 +354,33 @@ export async function changeSupervisorForStudent(
         },
         tx,
       );
+      // §15.2's assignment trigger again — a change is a fresh assignment for
+      // the student and the NEW supervisor, inside the same unit (§15.4).
+      // The outgoing supervisor is deliberately silent: §15.2 has no row for
+      // an ended relationship (history preserves it, I12).
+      await notify(
+        {
+          userId: studentId,
+          type: 'assignment',
+          title: 'Supervisor changed',
+          message: `Your supervisor is now ${supervisor.firstName} ${supervisor.lastName}.`,
+          resourceType: 'assignment',
+          resourceId: row.id,
+        },
+        tx,
+      );
+      await notify(
+        {
+          userId: supervisorId,
+          type: 'assignment',
+          title: 'Supervisor changed',
+          message: 'You are now supervising this student.',
+          resourceType: 'assignment',
+          resourceId: row.id,
+        },
+        tx,
+      );
+      return row;
     });
   } catch (err) {
     if (isUniqueViolation(err)) {

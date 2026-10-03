@@ -13,6 +13,12 @@ export const users = pgTable(
     passwordHash: text('password_hash'),
     // nullable — only students typically have one; null means "not on file"
     registrationNumber: varchar('registration_number', { length: 32 }),
+    // Display-only string (ADR-11 — Department stays a rejected entity).
+    // This is the key ADR-16's workflow auto-match reads at approval time:
+    // student's program -> the one active workflow for that program -> the
+    // flagged default -> no workflow (zero stages). Nullable: existing rows
+    // and unaffiliated accounts carry none and fall back to the default.
+    program: varchar('program', { length: 255 }),
     role: userRoleEnum('role').notNull().default('student'),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -31,6 +37,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   reviews: many(reviews),
   feedback: many(feedback),
   notifications: many(notifications),
+  // §3.4 — workflows this account configured (created_by, SET NULL on delete)
+  workflowsCreated: many(workflows),
 }));
 
 import { sessions } from './sessions.js';
@@ -42,3 +50,4 @@ import { submissionVersions } from './submission-versions.js';
 import { reviews } from './reviews.js';
 import { feedback } from './feedback.js';
 import { notifications } from './notifications.js';
+import { workflows } from './workflows.js';
