@@ -53,6 +53,15 @@ export const createWorkflowSchema = z.object({
  * (FR-CW-01/02/03). `archived` is the §11.14 "archive instead" affordance:
  * DELETE is 422 for referenced workflows, so archiving has to live here —
  * the same shape §11.2 gives projects (`PATCH … status`).
+ *
+ * `isDefault` — **PROPOSED delta (2026-10-04, Phase 13 / user sign-off).**
+ * §16.3's workflow builder promises a "set default" affordance, but §11.14
+ * froze seven endpoints with no default-setting path, so the ADR-16 fallback
+ * target could only be moved by `seed-workflows`. The flag therefore joins
+ * this body (true clears every other workflow's flag in the same write;
+ * false clears this one). The endpoint count is unchanged — the delta is a
+ * request-body field like §11.0.2's `program`. POST still never sets it: a
+ * newly created workflow never steals the flag. Flips LOCKED in Phase 16.
  */
 export const patchWorkflowSchema = z
   .object({
@@ -61,6 +70,7 @@ export const patchWorkflowSchema = z
     academicSession: z.string().max(32).nullable().optional(),
     description: z.string().max(5000).nullable().optional(),
     archived: z.boolean().optional(),
+    isDefault: z.boolean().optional(),
     stages: z.array(stageInputSchema).max(50).optional(),
   })
   .superRefine((value, ctx) => {
@@ -70,6 +80,7 @@ export const patchWorkflowSchema = z
       'academicSession',
       'description',
       'archived',
+      'isDefault',
       'stages',
     ];
     if (keys.every((key) => value[key] === undefined)) {

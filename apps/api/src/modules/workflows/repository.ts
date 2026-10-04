@@ -233,6 +233,19 @@ export async function updateWorkflow(
   return updated;
 }
 
+/**
+ * Set-default half 1 (§16.3 PROPOSED delta): clear THE flagged default before
+ * flagging another — the §8.10 `workflows_one_default` partial unique index
+ * admits at most one active default, so the order is what keeps the pair a
+ * single atomic move rather than a 23505 the client has to retry.
+ */
+export async function clearDefaultFlag(executor: WriteExecutor = db): Promise<void> {
+  await executor
+    .update(workflows)
+    .set({ isDefault: false, updatedAt: new Date() })
+    .where(sql`is_default`);
+}
+
 export async function deleteWorkflow(
   id: string,
   executor: WriteExecutor = db,

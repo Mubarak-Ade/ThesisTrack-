@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Phase 7 test: supervisor assignment lifecycle over HTTP.
+# System test: supervisor assignment lifecycle over HTTP (spec §5.3, §11.1, §13.3).
 #   GET    /projects/:projectId/supervisor  → participants + admin (history visible)
 #   POST   …                                → admin, at most one active (409 + DB index)
 #   PATCH  …                                → admin, change = END old row + INSERT new row
@@ -250,7 +250,7 @@ ck 'assign again after end (rehire via POST) → 201' 201 "$code"
 ck 'rehired supervisor is super2' "$S2_ID" "$(f data.assignment.supervisor.id)"
 
 # ── I13: a supervisor may hold MANY students; a student holds exactly one ──
-# ownerA already holds S2 at this point. Each case below is one the plan calls
+# ownerA already holds S2 at this point. Each case below is one the spec calls
 # out: an implementation keyed on supervisor_id would refuse these with a false
 # 409, and a second ACTIVE row for a single student must still be refused.
 echo '== I13 cardinality asymmetry (§6.2 corollary) =='

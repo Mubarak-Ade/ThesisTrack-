@@ -212,6 +212,18 @@ export async function patchWorkflow(id: string, input: PatchWorkflowInput): Prom
     await assertProgramSlotFree(targetProgram, id);
   }
 
+  // §16.3 "set default" (PROPOSED delta 2026-10-04): the flag selects ADR-16's
+  // fallback target, and only an ACTIVE workflow can be that target — the
+  // §8.10 partial unique index and findDefault's `archived_at is null` both
+  // read that way, so flagging an archived row would be a default the resolver
+  // can never see.
+  const willBeArchived = input.archived === undefined ? workflow.archivedAt !== null : input.archived;
+  if (input.isDefault === true && willBeArchived) {
+    throw new BusinessRuleError('An archived workflow cannot be the default workflow', [
+      { path: 'isDefault', message: 'Restore the workflow first, then set it as default' },
+    ]);
+  }
+
   const metadata: Partial<typeof workflows.$inferInsert> = {};
   if (input.name !== undefined) metadata.name = input.name;
   if (input.program !== undefined) metadata.program = targetProgram;
@@ -221,6 +233,13 @@ export async function patchWorkflow(id: string, input: PatchWorkflowInput): Prom
     // Re-archiving an archived row keeps its original stamp — archive is a
     // state, not a counter.
     metadata.archivedAt = input.archived ? (workflow.archivedAt ?? new Date()) : null;
+  }
+  if (input.isDefault === false) metadata.isDefault = false;
+  // Archiving releases the default slot exactly as it releases the program
+  // slot: the resolver ignores archived rows, so a flag left behind here would
+  // silently blind ADR-16 to every other default candidate.
+  if (input.archived === true && workflow.isDefault && input.isDefault !== true) {
+    metadata.isDefault = false;
   }
 
   let stages: WorkflowStageRow[] | null = null;
@@ -308,7 +327,27 @@ export async function patchWorkflow(id: string, input: PatchWorkflowInput): Prom
     }
   }
 
-  if (Object.keys(metadata).length > 0) {
+  if (input.isDefault === true) {
+    // One atomic move: apply this request's other metadata, clear THE default
+    // flag, raise this row's — the partial unique index (§8.10) rejects any
+    // interleaving, and the pair reads as a single SET DEFAULT statement.
+    try {
+      await db.transaction(async (tx) => {
+        if (Object.keys(metadata).length > 0) {
+          const applied = await repo.updateWorkflow(id, metadata, tx);
+          if (!applied) throw new NotFoundError('Workflow');
+        }
+        await repo.clearDefaultFlag(tx);
+        const flagged = await repo.updateWorkflow(id, { isDefault: true }, tx);
+        if (!flagged) throw new NotFoundError('Workflow');
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new ConflictError('Another workflow was set as default at the same moment — retry');
+      }
+      throw err;
+    }
+  } else if (Object.keys(metadata).length > 0) {
     const updated = await repo.updateWorkflow(id, metadata);
     if (!updated) throw new NotFoundError('Workflow'); // deleted concurrently
   }

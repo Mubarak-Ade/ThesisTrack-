@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Phase 4 critical test: the full auth lifecycle end-to-end.
+# System test: the full auth lifecycle end-to-end (spec §11.0.1, §5.1, §5.2).
 #   login → protected → token expires → refresh → continue → logout → refresh fails
-# plus: rotation single-use, provisioning, activation, reset, revocation, roles.
+# plus: rotation single-use, provisioning, activation, invitation preview
+# (GET /auth/invitation/:token), reset, revocation, roles.
 set -u
 
 BASE="${BASE:-http://localhost:${PORT:-3001}/api/v1}"
-ADMIN_PASS='AdminPass123!'
+ADMIN_PASS="${ADMIN_PASS:-${ADMIN_PASSWORD:-AdminPass123!}}"
 NEW_STUDENT_PASS='StudentPass123!'
 RESET_PASS='ResetPass456!'
 STUDENT_EMAIL="student-$(date +%s)@test.local"
@@ -105,6 +106,16 @@ ck 'marked as reinvited' 'true' "$(f data.reinvited)"
 ACT_TOKEN=$(f data.activationToken)
 ck 'invitation token was rotated' 1 "$([ -n "$ACT_TOKEN" ] && [ "$ACT_TOKEN" != "$ACT_TOKEN1" ] && echo 1 || echo 0)"
 
+# GET /auth/invitation/:token — the public preview behind the invite link (§11.0.1)
+code=$(req GET "$BASE/auth/invitation/$ACT_TOKEN")
+ck 'preview of a live invitation → 200 valid' 200 "$code"
+ck 'preview status is valid' 'valid' "$(f data.status)"
+ck 'preview names the invitee (no enumeration surprise)' "$STUDENT_EMAIL" "$(f data.invitation.email)"
+code=$(req GET "$BASE/auth/invitation/$(node -pe 'crypto.randomUUID()')")
+ck 'preview of an unknown token → 200 invalid' 200 "$code"
+ck 'preview status is invalid' 'invalid' "$(f data.status)"
+ck 'invalid preview carries no invitation' 'null' "$(f data.invitation)"
+
 code=$(req POST "$BASE/users" -H "Authorization: Bearer $AT_ADMIN" -H 'Content-Type: application/json' \
   -d "{\"firstName\":\"Dup\",\"lastName\":\"User\",\"email\":\"$ADMIN_EMAIL\",\"role\":\"student\"}")
 ck 'duplicate of ACTIVE account conflicts' 409 "$code"
@@ -125,6 +136,10 @@ ck 'account now ACTIVE' 'true' "$(f data.user.isActive)"
 code=$(req POST "$BASE/auth/activate" -H 'Content-Type: application/json' \
   -d "{\"token\":\"$ACT_TOKEN\",\"password\":\"$NEW_STUDENT_PASS\"}")
 ck 'activation token is single-use' 400 "$code"
+
+code=$(req GET "$BASE/auth/invitation/$ACT_TOKEN")
+ck 'preview after activation → already_activated' 'already_activated' "$(f data.status)"
+ck 'activated preview still names the account' "$STUDENT_EMAIL" "$(f data.invitation.email)"
 
 code=$(req POST "$BASE/auth/login" -c "$JAR_STUDENT" -H 'Content-Type: application/json' \
   -d "{\"email\":\"$STUDENT_EMAIL\",\"password\":\"$NEW_STUDENT_PASS\"}")

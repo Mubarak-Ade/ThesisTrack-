@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Phase 5 RBAC test: the authorization matrix over HTTP.
+# System test: the authorization matrix over HTTP (spec §4.5, §13, §11.14).
 # Requires a running server and a seeded admin (pnpm seed:admin).
 # Tokens are logged in immediately before each request so the suite works
 # with any ACCESS_TOKEN_TTL (including the short TTL used by auth-flow.sh).
@@ -90,6 +90,53 @@ ck 'supervisor → 403' 403 "$code"
 T=$(login "$ADMIN_EMAIL" "$ADMIN_PASSWORD")
 code=$(req POST "$BASE/users" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' -d "$body")
 ck 'admin → 201' 201 "$code"
+
+echo '== RBAC over the new endpoints: workflows, stages, caseload, reviews (§11.14, §11.6, §11.1) =='
+
+code=$(req POST "$BASE/workflows" -H 'Content-Type: application/json' -d '{}')
+ck 'anonymous POST /workflows → 401' 401 "$code"
+
+WBODY="{\"name\":\"rbac-probe-$(date +%s)\"}"
+
+T=$(login "$OTH" "$PW")
+code=$(req POST "$BASE/workflows" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' -d "$WBODY")
+ck 'student POST /workflows → 403' 403 "$code"
+T=$(login "$OTH" "$PW")
+code=$(req GET "$BASE/workflows?limit=1" -H "Authorization: Bearer $T")
+ck 'student GET /workflows → 403' 403 "$code"
+T=$(login "$OTH" "$PW")
+code=$(req GET "$BASE/supervisors/me/students" -H "Authorization: Bearer $T")
+ck 'student GET /supervisors/me/students → 403' 403 "$code"
+T=$(login "$OTH" "$PW")
+code=$(req POST "$BASE/projects/$PROJECT/stages/advance" -H "Authorization: Bearer $T")
+ck 'student POST stages/advance → 403 (role guard precedes resource)' 403 "$code"
+
+T=$(login "$SUP" "$PW")
+code=$(req POST "$BASE/workflows" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' -d "$WBODY")
+ck 'supervisor POST /workflows → 403 (Coordinator = admin, §4.6)' 403 "$code"
+T=$(login "$SUP" "$PW")
+code=$(req GET "$BASE/workflows?limit=1" -H "Authorization: Bearer $T")
+ck 'supervisor GET /workflows → 200' 200 "$code"
+T=$(login "$SUP" "$PW")
+code=$(req GET "$BASE/supervisors/me/students" -H "Authorization: Bearer $T")
+ck 'assigned supervisor caseload → 200' 200 "$code"
+
+T=$(login "$OWN" "$PW")
+code=$(req POST "$BASE/projects/$PROJECT/stages/advance" -H "Authorization: Bearer $T")
+ck 'owner student advance → 403 (only the assigned supervisor/admin advance)' 403 "$code"
+T=$(login "$OWN" "$PW")
+code=$(req POST "$BASE/submissions" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"projectId\":\"$PROJECT\",\"title\":\"RBAC probe submission\"}")
+ck 'owner creates a submission → 201 (setup)' 201 "$code"
+SUB=$(f data.submission.id)
+T=$(login "$OWN" "$PW")
+code=$(req POST "$BASE/submissions/$SUB/reviews" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d '{"decision":"approved"}')
+ck 'owner reviewing own submission → 403 (reviews are the supervisor’s)' 403 "$code"
+
+T=$(login "$ADMIN_EMAIL" "$ADMIN_PASSWORD")
+code=$(req POST "$BASE/workflows" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' -d "$WBODY")
+ck 'admin POST /workflows → 201' 201 "$code"
 
 echo
 echo "==================================="

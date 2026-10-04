@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Phase 6 user-management test: admin directory end-to-end.
+# System test: admin directory end-to-end (spec §11.0.2, §5.1, §5.2).
 #   list/search/filter/paginate · detail · patch (incl. activate/deactivate
-#   guardrails) · resend invitation · all-or-nothing bulk import
+#   guardrails, the §11.0.2 `program` delta) · resend invitation ·
+#   all-or-nothing bulk import
 # Requires a running server (ACCESS_TOKEN_TTL=3 recommended) and seeded admin.
 set -u
 
@@ -352,6 +353,30 @@ ck 'imported user activates' 200 "$code"
 code=$(req POST "$BASE/auth/login" -H 'Content-Type: application/json' \
   -d "{\"email\":\"$IMPORT_1\",\"password\":\"$NEW_PASS\"}")
 ck 'imported user signs in' 200 "$code"
+
+echo '== 6. PATCH program: the §11.0.2 PROPOSED delta (ADR-16 write path) =='
+
+T=$(adm)
+code=$(req PATCH "$BASE/users/$PATCH_ID" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d '{"program":"Data Science"}')
+ck 'PATCH {program} → 200' 200 "$code"
+ck 'program echoed in the user view' 'Data Science' "$(f data.user.program)"
+
+T=$(adm)
+code=$(req GET "$BASE/users/$PATCH_ID" -H "Authorization: Bearer $T")
+ck 'detail carries the program' 'Data Science' "$(f data.user.program)"
+
+T=$(adm)
+code=$(req PATCH "$BASE/users/$PATCH_ID" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d '{"program":null}')
+ck 'PATCH {program:null} clears it (NULL = unaffiliated)' 200 "$code"
+ck 'program cleared' 'null' "$(f data.user.program)"
+
+T=$(adm)
+code=$(req POST "$BASE/users" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"firstName\":\"Prog\",\"lastName\":\"Ram\",\"email\":\"umgmt-prog-$STAMP@test.local\",\"role\":\"student\",\"program\":\"Software Engineering\"}")
+ck 'POST /users accepts program → 201' 201 "$code"
+ck 'create echoes the program' 'Software Engineering' "$(f data.user.program)"
 
 echo
 echo "==================================="

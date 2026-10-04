@@ -1019,3 +1019,127 @@ describe('GET /projects scoping (§11.2)', () => {
     expect(e(bad).code).toBe('VALIDATION_ERROR');
   });
 });
+
+/* ========================================================================= */
+
+describe('set default via PATCH (§16.3 builder "set default" — PROPOSED delta 2026-10-04)', () => {
+  const PROG_A = `DefaultA Prog ${stamp}`;
+  const PROG_B = `DefaultB Prog ${stamp}`;
+  const PROG_C = `DefaultC Prog ${stamp}`;
+  let wA: any;
+  let wB: any;
+  let wArchived: any;
+  let originalDefaultId = '';
+
+  const listHasDefault = async (id: string): Promise<boolean> => {
+    const res = await request(app).get('/api/v1/workflows?limit=100').set(auth(admin));
+    expect(res.status).toBe(200);
+    return d(res).workflows.some((w: any) => w.id === id && w.isDefault === true);
+  };
+
+  beforeAll(async () => {
+    originalDefaultId = defaultWorkflowId;
+    for (const [slot, program] of [
+      ['A', PROG_A],
+      ['B', PROG_B],
+      ['C', PROG_C],
+    ] as const) {
+      const res = await request(app)
+        .post('/api/v1/workflows')
+        .set(auth(admin))
+        .send({ name: `SetDefault${slot} ${stamp}`, program, stages: [{ name: `${slot} one` }] });
+      expect(res.status).toBe(201);
+      if (slot === 'A') wA = d(res);
+      if (slot === 'B') wB = d(res);
+      if (slot === 'C') wArchived = d(res);
+    }
+    expect(wA.workflow.isDefault).toBe(false); // POST never steals the flag (§8.10)
+  });
+
+  afterAll(async () => {
+    // Leave the fixtures repaired: the seed default is flagged again so the
+    // ADR-16 branch-3 contract holds for every later run and file.
+    const res = await request(app)
+      .patch(`/api/v1/workflows/${originalDefaultId}`)
+      .set(auth(admin))
+      .send({ isDefault: true });
+    expect(res.status).toBe(200);
+  });
+
+  it('PATCH {isDefault:true} flags this workflow and clears the old default in one write', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/workflows/${wA.workflow.id}`)
+      .set(auth(admin))
+      .send({ isDefault: true });
+    expect(res.status).toBe(200);
+    expect(d(res).workflow.isDefault).toBe(true);
+    expect(await listHasDefault(wA.workflow.id)).toBe(true);
+    expect(await listHasDefault(originalDefaultId)).toBe(false); // the previous holder moved off
+  });
+
+  it('the flag moves as a unit: the next set-default clears the previous holder', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/workflows/${wB.workflow.id}`)
+      .set(auth(admin))
+      .send({ isDefault: true });
+    expect(res.status).toBe(200);
+    expect(d(res).workflow.isDefault).toBe(true);
+    expect(await listHasDefault(wA.workflow.id)).toBe(false);
+    expect(await listHasDefault(wB.workflow.id)).toBe(true);
+  });
+
+  it('PATCH {isDefault:false} clears the flag — "no default" is a legal state (ADR-16 → zero stages)', async () => {
+    const res = await request(app)
+      .patch(`/api/v1/workflows/${wB.workflow.id}`)
+      .set(auth(admin))
+      .send({ isDefault: false });
+    expect(res.status).toBe(200);
+    expect(d(res).workflow.isDefault).toBe(false);
+    expect(await listHasDefault(wB.workflow.id)).toBe(false);
+  });
+
+  it('an archived workflow cannot be set default — 422 on path isDefault, both shapes', async () => {
+    const archive = await request(app)
+      .patch(`/api/v1/workflows/${wArchived.workflow.id}`)
+      .set(auth(admin))
+      .send({ archived: true });
+    expect(archive.status).toBe(200);
+
+    const alone = await request(app)
+      .patch(`/api/v1/workflows/${wArchived.workflow.id}`)
+      .set(auth(admin))
+      .send({ isDefault: true });
+    expect(alone.status).toBe(422);
+    expect(e(alone).code).toBe('BUSINESS_RULE_VIOLATION');
+    expect(e(alone).details).toEqual([
+      { path: 'isDefault', message: 'Restore the workflow first, then set it as default' },
+    ]);
+    expect(await listHasDefault(wArchived.workflow.id)).toBe(false);
+
+    // Same rule on an ACTIVE row asking to flip both flags at once.
+    const combined = await request(app)
+      .patch(`/api/v1/workflows/${wA.workflow.id}`)
+      .set(auth(admin))
+      .send({ archived: true, isDefault: true });
+    expect(combined.status).toBe(422);
+    expect(e(combined).details?.[0]?.path).toBe('isDefault');
+    expect(d(await request(app).get(`/api/v1/workflows/${wA.workflow.id}`).set(auth(admin))).workflow.archivedAt).toBeNull();
+  });
+
+  it('archiving the default workflow releases the flag (§8.10 partial index scope)', async () => {
+    const set = await request(app)
+      .patch(`/api/v1/workflows/${wA.workflow.id}`)
+      .set(auth(admin))
+      .send({ isDefault: true });
+    expect(set.status).toBe(200);
+    expect(d(set).workflow.isDefault).toBe(true);
+
+    const archive = await request(app)
+      .patch(`/api/v1/workflows/${wA.workflow.id}`)
+      .set(auth(admin))
+      .send({ archived: true });
+    expect(archive.status).toBe(200);
+    expect(d(archive).workflow.isDefault).toBe(false);
+    expect(await listHasDefault(wA.workflow.id)).toBe(false);
+  });
+});
