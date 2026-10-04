@@ -1,21 +1,13 @@
-import {
-  Building2,
-  ChevronDown,
-  GraduationCap,
-  LayoutDashboard,
-  LogOut,
-  Settings,
-  UserRound,
-  X,
-} from 'lucide-react';
+import { useId, useState } from 'react';
+import { ChevronDown, LogOut, X } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { ApiError, api } from '@/lib/api/http';
+import { signOut } from '@/lib/auth/signOut';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
+import type { NavItem } from './nav';
 
 const ROLE_TITLES: Record<string, string> = {
   administrator: 'Administrator',
@@ -23,53 +15,43 @@ const ROLE_TITLES: Record<string, string> = {
   student: 'Student',
 };
 
-interface NavItem {
-  label: string;
-  icon: typeof LayoutDashboard;
-  to?: string;
-}
+const rowClasses = (isActive: boolean) =>
+  cn(
+    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
+    isActive
+      ? 'bg-primary/10 font-semibold text-primary'
+      : 'font-medium text-muted-foreground hover:bg-accent hover:text-foreground',
+  );
 
-/**
- * Exactly the mockup's five items (spec §3) — there is no Users entry;
- * `/users*` is reached via Dashboard links and breadcrumbs (mockup parity).
- * Departments/Settings stay out-of-scope placeholders (spec §8).
- */
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' },
-  { label: 'Faculty', icon: GraduationCap, to: '/faculty' },
-  { label: 'Students', icon: UserRound, to: '/students' },
-  { label: 'Departments', icon: Building2 },
-  { label: 'Settings', icon: Settings },
-];
+const childClasses = (isActive: boolean) =>
+  cn(
+    'flex items-center gap-2 rounded-lg py-1.5 pl-9 pr-3 text-sm transition-colors',
+    isActive
+      ? 'font-semibold text-primary'
+      : 'font-medium text-muted-foreground hover:bg-accent hover:text-foreground',
+  );
 
 interface SidebarProps {
+  /** The role's §10.5 nav column, supplied by RoleShell via ConsoleLayout. */
+  items: NavItem[];
   /** Closes the off-canvas drawer after a navigation (≤1024px). */
   onNavigate?: () => void;
 }
 
-export default function Sidebar({ onNavigate }: SidebarProps) {
+/**
+ * Console nav rail: renders whatever column RoleShell resolved (§10.5) —
+ * plain links, plus collapsible groups such as "My Project ▾" whose parent
+ * toggles the children (it has no route of its own).
+ */
+export default function Sidebar({ items, onNavigate }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
+  const groupId = useId();
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   const roleTitle = user ? (ROLE_TITLES[user.role] ?? user.role) : '';
 
-  const signOut = async () => {
-    try {
-      await api.post('/auth/logout');
-    } catch (error) {
-      // The interceptor already turned 401/403 into their own redirect —
-      // falling through to clear()+navigate would race it (the anonymous
-      // route guard redirects to /unauthorized and wins).
-      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return;
-      // The cookie may already be gone — local sign-out still proceeds.
-    }
-    // The anonymous guard on this route races the redirect below (its
-    // <Navigate> fires in a later render than this call). Declaring the exit
-    // target first makes both actors land on /login, whichever wins.
-    useAuthStore.getState().setExitTo('/login');
-    useAuthStore.getState().clear();
-    navigate('/login', { replace: true });
-  };
+  const signOutNow = () => void signOut(navigate);
 
   return (
     <div className="flex h-full flex-col border-r border-border bg-background">
@@ -89,7 +71,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
             >
               <path d="M12 7v13" />
               <path d="M12 7C10.2 5.6 7.8 5 5 5v13c2.8 0 5.2.6 7 2" />
-              <path d="M12 7c1.8-1.4 4.2-2 7-2v13c-2.8 0-5.2.6-7 2" />
+              <path d="M12 7c1.8-1.4 4.2-2 7-2v13c-2.8 0-5.2-.6-7-2" />
             </svg>
           </span>
           <span className="text-lg font-bold tracking-tight text-foreground">ThesisTrack</span>
@@ -106,39 +88,60 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
 
       <nav aria-label="Console" className="flex-1 overflow-y-auto px-3 py-2">
         <ul className="space-y-1">
-          {NAV_ITEMS.map((item) => {
+          {items.map((item) => {
             const Icon = item.icon;
-            if (item.to) {
+
+            if (item.children) {
+              const expanded = openGroup === item.label;
+              const listId = `${groupId}-${item.label.replace(/\s+/g, '-').toLowerCase()}`;
               return (
                 <li key={item.label}>
-                  <NavLink
-                    to={item.to}
-                    onClick={onNavigate}
-                    className={({ isActive }) =>
-                      cn(
-                        'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
-                        isActive
-                          ? 'bg-primary/10 font-semibold text-primary'
-                          : 'font-medium text-muted-foreground hover:bg-accent hover:text-foreground',
-                      )
-                    }
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-controls={listId}
+                    onClick={() => setOpenGroup(expanded ? null : item.label)}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   >
                     <Icon className="size-4 shrink-0" aria-hidden="true" />
                     {item.label}
-                  </NavLink>
+                    <ChevronDown
+                      className={cn(
+                        'ml-auto size-4 shrink-0 transition-transform',
+                        expanded && 'rotate-180',
+                      )}
+                      aria-hidden="true"
+                    />
+                  </button>
+                  {expanded && (
+                    <ul id={listId} className="mt-1 space-y-1">
+                      {item.children.map((child) => (
+                        <li key={child.to}>
+                          <NavLink
+                            to={child.to}
+                            onClick={onNavigate}
+                            className={({ isActive }) => childClasses(isActive)}
+                          >
+                            {child.label}
+                          </NavLink>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               );
             }
+
             return (
               <li key={item.label}>
-                <button
-                  type="button"
-                  onClick={() => toast.info(`${item.label} is not available yet`)}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                <NavLink
+                  to={item.to}
+                  onClick={onNavigate}
+                  className={({ isActive }) => rowClasses(isActive)}
                 >
                   <Icon className="size-4 shrink-0" aria-hidden="true" />
                   {item.label}
-                </button>
+                </NavLink>
               </li>
             );
           })}
@@ -159,7 +162,7 @@ export default function Sidebar({ onNavigate }: SidebarProps) {
         </div>
         <Button
           type="button"
-          onClick={signOut}
+          onClick={signOutNow}
           className="mt-3 w-full justify-start gap-2 text-red-600 hover:bg-red-500/10 hover:text-red-600"
           variant="ghost"
         >

@@ -1,32 +1,41 @@
 /**
- * Coordinator Dashboard models (spec §5.2). All data below has no endpoint —
- * `dashboardRepo` serves fixtures behind the same async shape a live repo
- * would use, so swapping the source later touches only `data/` (spec §4 Rule 1).
+ * Coordinator Dashboard models (spec §5.2). `dashboardRepo` assembles them
+ * from the live API and falls back to the §5.1 fixture snapshot behind the
+ * same async shape, flagged via `usedFallback` (spec §4 Rule 1 — screens
+ * never see raw DTOs).
  */
 
 export interface ProjectProgress {
   total: number;
   active: number;
   completed: number;
-  atRisk: number;
+  archived: number;
 }
 
 export interface DepartmentProgress {
   students: number;
-  assigned: number;
-  unassigned: number;
+  faculty: number;
+  awaiting: number;
 }
 
-export type WorkspaceStatus = 'IN PROGRESS' | 'PENDING REVIEW' | 'DELAYED' | 'COMPLETED';
+export type WorkspaceStatus =
+  | 'IN PROGRESS'
+  | 'PENDING REVIEW'
+  | 'DELAYED'
+  | 'COMPLETED'
+  | 'ARCHIVED';
 
 export interface WorkspaceRow {
+  /** Project id — React key on live rows (fixture rows carry demo ids). */
+  id: string;
   student: string;
-  /** Thesis code shown under the name (`TH-2024-001`, spec §5.1). */
-  code: string;
+  /** Thesis code shown under the name (`TH-2024-001`, spec §5.1) — fixture-only. */
+  code?: string;
   project: string;
-  phase: string;
+  /** Current workflow stage; absent when the live API reports none. */
+  phase?: string;
   status: WorkspaceStatus;
-  supervisor: string;
+  supervisor?: string;
 }
 
 export type TaskKind = 'UPCOMING' | 'ACTION REQUIRED' | 'OVERDUE';
@@ -42,9 +51,11 @@ export interface CriticalTask {
   dateEm: string;
   bodyTail: string;
   cta: string;
+  /** Destination for the CTA button (no longer hardcoded in the rail). */
+  to: string;
 }
 
-/** Quick-action tile copy (spec §5.1) — routes/CSV live with the screen. */
+/** Quick-action tile copy (spec §5.1) — shared by live and fallback paths. */
 export interface QuickAction {
   label: string;
   hint: string;
@@ -77,4 +88,6 @@ export interface DashboardData {
   tasks: TaskGroups;
   activity: DashActivity[];
   quickActions: QuickAction[];
+  /** True when fixtures answered (§10.4 — screen shows SampleDataBanner). */
+  usedFallback: boolean;
 }

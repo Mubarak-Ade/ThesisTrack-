@@ -20,6 +20,11 @@ export interface ConsoleUser {
   isActive: boolean;
   createdAt: string | null;
   registrationNumber: string | null;
+  /**
+   * §11.0.2 PROPOSED delta — the ADR-16 workflow auto-match key. Absent from
+   * older payloads/fixtures → mapped to `null` (unaffiliated: default workflow).
+   */
+  program: string | null;
   /** Fixture-only hints (department shown in tables/rails). */
   department?: string;
   /** Fixture-only relative label ("2 hours ago") — live rows show "—" . */
@@ -96,6 +101,8 @@ export interface CreateUserInput {
   role: Role;
   /** UI-only — the API's create schema has no department field (§A). */
   department?: string;
+  /** Optional §11.0.2 delta — blank/absent means unaffiliated (ADR-16 fallback). */
+  program?: string | null;
 }
 
 export interface ImportRow {
@@ -104,11 +111,18 @@ export interface ImportRow {
   email: string;
   role: Role;
   department?: string;
+  /** Optional §11.0.2 delta — blank/absent means unaffiliated (ADR-16 fallback). */
+  program?: string | null;
 }
 
 export interface CreatedUser {
   user: ConsoleUser;
   status: UserStatus;
+}
+
+/** Partial `PATCH /users/:id` body — §11.0.2 delta (`null` clears `program`). */
+export interface UpdateUserInput {
+  program: string | null;
 }
 
 export interface ImportResult {

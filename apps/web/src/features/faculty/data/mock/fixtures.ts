@@ -1,22 +1,35 @@
 import type { FacultySnapshot } from '../types';
 
+/**
+ * Stat-card copy — identical for live reads and fixture fallback, so labels
+ * and notes never disagree with the numbers' provenance (the banner covers
+ * the fallback numbers themselves).
+ */
+export const FACULTY_STAT_NOTES = {
+  total: 'User rows with role supervisor',
+  activeSupervisors: 'Supervisor accounts with isActive',
+  students: 'User rows with role student',
+  pending: 'Proposals with status submitted',
+} as const;
+
 /** Mockup values verbatim (spec §5.5) — 8 rows so PREV/NEXT has a real page 2. */
 export const FACULTY_FIXTURES: FacultySnapshot = {
   stats: {
     total: 42,
-    totalNote: '+2 this term',
+    totalNote: FACULTY_STAT_NOTES.total,
+    activeSupervisors: 38,
+    activeSupervisorsNote: FACULTY_STAT_NOTES.activeSupervisors,
     students: 212,
-    studentsNote: '+15% from last year',
-    avgLoad: 5.2,
-    avgLoadNote: 'Optimal range',
+    studentsNote: FACULTY_STAT_NOTES.students,
     pending: 14,
-    pendingNote: 'Needs attention',
+    pendingNote: FACULTY_STAT_NOTES.pending,
   },
   rows: [
     {
       name: 'Dr. Elena Rossi',
       code: 'FAC-8821',
-      department: 'Informatics',
+      email: 'e.rossi@university.edu',
+      program: 'Informatics',
       workloadStudents: 8,
       capacity: 10,
       avgProgress: 72,
@@ -26,7 +39,8 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     {
       name: 'Prof. Thomas Miller',
       code: 'FAC-4412',
-      department: 'Architecture',
+      email: 't.miller@university.edu',
+      program: 'Architecture',
       workloadStudents: 5,
       capacity: 10,
       avgProgress: 45,
@@ -36,7 +50,8 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     {
       name: 'Dr. Sarah Blake',
       code: 'FAC-9811',
-      department: 'Cyber Security',
+      email: 's.blake@university.edu',
+      program: 'Cyber Security',
       workloadStudents: 3,
       capacity: 10,
       avgProgress: 88,
@@ -46,7 +61,8 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     {
       name: 'Dr. Alistair Vance',
       code: 'FAC-1102',
-      department: 'Informatics',
+      email: 'a.vance@university.edu',
+      program: 'Informatics',
       workloadStudents: 12,
       capacity: 10,
       avgProgress: 65,
@@ -56,7 +72,8 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     {
       name: 'Prof. Julianne Moore',
       code: 'FAC-2234',
-      department: 'Philosophy',
+      email: 'j.moore@university.edu',
+      program: 'Philosophy',
       workloadStudents: 0,
       capacity: 10,
       avgProgress: 0,
@@ -66,7 +83,8 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     {
       name: 'Prof. Daniel Okafor',
       code: 'FAC-5567',
-      department: 'Architecture',
+      email: 'd.okafor@university.edu',
+      program: 'Architecture',
       workloadStudents: 4,
       capacity: 10,
       avgProgress: 60,
@@ -76,7 +94,8 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     {
       name: 'Dr. Priya Nair',
       code: 'FAC-3345',
-      department: 'Cyber Security',
+      email: 'p.nair@university.edu',
+      program: 'Cyber Security',
       workloadStudents: 6,
       capacity: 10,
       avgProgress: 78,
@@ -86,7 +105,8 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     {
       name: 'Prof. Henrik Sorensen',
       code: 'FAC-7789',
-      department: 'Philosophy',
+      email: 'h.sorensen@university.edu',
+      program: 'Philosophy',
       workloadStudents: 7,
       capacity: 10,
       avgProgress: 54,
@@ -94,11 +114,12 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
       lastActivity: '4 days ago',
     },
   ],
+  total: 8,
   distribution: [
-    { department: 'Informatics', supervisors: 12 },
-    { department: 'Architecture', supervisors: 8 },
-    { department: 'Cyber Security', supervisors: 10 },
-    { department: 'Philosophy', supervisors: 12 },
+    { program: 'Informatics', supervisors: 12 },
+    { program: 'Architecture', supervisors: 8 },
+    { program: 'Cyber Security', supervisors: 10 },
+    { program: 'Philosophy', supervisors: 12 },
   ],
   alerts: [
     {
@@ -119,4 +140,5 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     { label: 'Update Faculty Roles', toast: 'Update Faculty Roles is not available yet' },
     { label: 'Communicate All', toast: 'Communicate All is not available yet' },
   ],
+  usedFallback: true,
 };

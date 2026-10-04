@@ -1,7 +1,9 @@
 import { Bell, Menu, Search } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { Input } from '@/components/ui/input';
 import { useAuthStore } from '@/stores/auth';
+import { useUnreadCount } from './useShellQueries';
 
 const ROLE_LABELS: Record<string, string> = {
   administrator: 'ADMINISTRATOR',
@@ -16,6 +18,8 @@ interface TopbarProps {
 
 export default function Topbar({ onOpenMenu }: TopbarProps) {
   const role = useAuthStore((s) => s.user?.role);
+  // Real badge (task 10.4): unread count from GET /notifications/unread-count.
+  const unread = useUnreadCount().data ?? 0;
 
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
@@ -42,15 +46,26 @@ export default function Topbar({ onOpenMenu }: TopbarProps) {
           />
         </div>
 
-        {/* Decorative notification bell with the mockup's red dot (spec §3). */}
-        <span
+        {/* Notification bell (§10.3 → /notifications) with the unread badge
+            from GET /notifications/unread-count — real, focusable, announced. */}
+        <Link
+          to="/notifications"
           data-testid="topbar-bell"
-          aria-hidden="true"
-          className="relative ml-auto hidden shrink-0 sm:inline-flex"
+          aria-label={
+            unread > 0 ? `Notifications, ${unread} unread` : 'Notifications, none unread'
+          }
+          className="relative ml-auto hidden shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex"
         >
-          <Bell className="size-5 text-muted-foreground" />
-          <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-red-500" />
-        </span>
+          <Bell className="size-5" aria-hidden="true" />
+          {unread > 0 && (
+            <span
+              data-testid="topbar-bell-badge"
+              className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white"
+            >
+              {unread > 99 ? '99+' : unread}
+            </span>
+          )}
+        </Link>
 
         <div className="ml-auto min-w-0 text-right sm:ml-4">
           <p className="truncate text-[11px] font-bold uppercase tracking-widest text-primary">

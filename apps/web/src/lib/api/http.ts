@@ -13,6 +13,10 @@ export interface PublicUser {
   role: Role;
   isActive: boolean;
   createdAt: string;
+  /** Present on §11.0.2 user objects; optional for older payloads/fixtures. */
+  registrationNumber?: string | null;
+  /** §8.7 program — ADR-16's workflow match key; shown in Settings. */
+  program?: string | null;
 }
 
 /** POST /auth/login and POST /auth/refresh answer with the same shape. */
@@ -219,5 +223,6 @@ export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
   put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
+  patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
   delete: <T>(path: string) => request<T>('DELETE', path),
 };

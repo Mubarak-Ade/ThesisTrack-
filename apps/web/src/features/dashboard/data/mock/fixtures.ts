@@ -1,11 +1,24 @@
-/** Coordinator Dashboard sample data (spec §4 — no dashboard endpoint). Mockup values are binding (spec §5.1). */
-import type { DashboardData } from '../types';
+/** Coordinator Dashboard sample data (spec §5.1 — fallback behind SampleDataBanner). Mockup values are binding. */
+import type { DashboardData, QuickAction } from '../types';
+
+/**
+ * Quick-action tiles are static configuration shared verbatim by the live
+ * and fallback paths — routes point at screens that exist (§16.3), never
+ * placeholders.
+ */
+export const QUICK_ACTIONS: QuickAction[] = [
+  { label: 'Add User', hint: 'Enroll student/faculty', to: '/users/new' },
+  { label: 'Assign Students', hint: 'Link students to mentors', to: '/assignments' },
+  { label: 'View Projects', hint: 'Browse active research', to: '/projects' },
+  { label: 'Generate Report', hint: 'Export progress summary', to: '/reports' },
+];
 
 export const DASHBOARD_FIXTURES: DashboardData = {
-  project: { total: 86, active: 71, completed: 9, atRisk: 6 },
-  department: { students: 120, assigned: 112, unassigned: 8 },
+  project: { total: 86, active: 71, completed: 9, archived: 6 },
+  department: { students: 120, faculty: 112, awaiting: 8 },
   workspace: [
     {
+      id: 'fx-1',
       student: 'Marcus Holloway',
       code: 'TH-2024-001',
       project: 'Neural Network Optimization for Edge Devices',
@@ -14,6 +27,7 @@ export const DASHBOARD_FIXTURES: DashboardData = {
       supervisor: 'Dr. Elena Rossi',
     },
     {
+      id: 'fx-2',
       student: 'Anita Desai',
       code: 'TH-2024-014',
       project: 'Blockchain-based Academic Credential Verification',
@@ -22,6 +36,7 @@ export const DASHBOARD_FIXTURES: DashboardData = {
       supervisor: 'Prof. Thomas Miller',
     },
     {
+      id: 'fx-3',
       student: 'Robert Chen',
       code: 'TH-2023-089',
       project: 'Generative AI for Parametric Architectural Floor Plans',
@@ -30,6 +45,7 @@ export const DASHBOARD_FIXTURES: DashboardData = {
       supervisor: 'Dr. Alistair Vance',
     },
     {
+      id: 'fx-4',
       student: 'Liam O\u2019Connor',
       code: 'TH-2024-022',
       project: 'IoT-enabled Smart Campus Energy Monitoring',
@@ -38,6 +54,7 @@ export const DASHBOARD_FIXTURES: DashboardData = {
       supervisor: 'Prof. Amara Okafor',
     },
     {
+      id: 'fx-5',
       student: 'Yuki Tanaka',
       code: 'TH-2023-045',
       project: 'Federated Learning for Privacy-Preserving Student Analytics',
@@ -61,6 +78,7 @@ export const DASHBOARD_FIXTURES: DashboardData = {
       dateEm: 'Oct 30th',
       bodyTail: '. 14 students are currently unassigned.',
       cta: 'Assign Faculty Now \u2192',
+      to: '/assignments',
     },
   },
   activity: [
@@ -73,10 +91,7 @@ export const DASHBOARD_FIXTURES: DashboardData = {
       when: '2 DAYS AGO',
     },
   ],
-  quickActions: [
-    { label: 'Add User', hint: 'Enroll student/faculty', to: '/users/new' },
-    { label: 'Assign Students', hint: 'Link students to mentors', to: '/users' },
-    { label: 'View Projects', hint: 'Browse active research', to: '/users' },
-    { label: 'Generate Report', hint: 'Export progress summary', csv: true },
-  ],
+  quickActions: QUICK_ACTIONS,
+  // `dashboardRepo` flips this to true on the fallback path.
+  usedFallback: false,
 };

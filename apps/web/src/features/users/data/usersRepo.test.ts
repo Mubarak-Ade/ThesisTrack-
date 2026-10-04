@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Keep the real ApiError class; replace only the network surface.
 vi.mock('@/lib/api/http', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api/http')>();
-  return { ...actual, api: { get: vi.fn(), post: vi.fn() } };
+  return { ...actual, api: { get: vi.fn(), post: vi.fn(), patch: vi.fn() } };
 });
 
 import { api, ApiError } from '@/lib/api/http';
@@ -17,15 +17,18 @@ import {
   listSecurityLogs,
   listUsers,
   sendInvite,
+  updateUser,
 } from './usersRepo';
 
 const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
+const patch = vi.mocked(api.patch);
 
 beforeEach(() => {
   vi.restoreAllMocks();
   get.mockReset();
   post.mockReset();
+  patch.mockReset();
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
@@ -156,6 +159,26 @@ describe('writes', () => {
     ).rejects.toBeInstanceOf(ApiError);
   });
 
+  it('createUser forwards the optional §11.0.2 program, trimmed', async () => {
+    post.mockResolvedValue({ user: { ...MARCUS, program: 'Data Science' }, status: 'INVITED' });
+
+    await createUser({
+      firstName: 'New',
+      lastName: 'Student',
+      email: 'new@student.edu',
+      role: 'student',
+      program: '  Data Science  ',
+    });
+
+    expect(post).toHaveBeenCalledWith('/users', {
+      firstName: 'New',
+      lastName: 'Student',
+      email: 'new@student.edu',
+      role: 'student',
+      program: 'Data Science',
+    });
+  });
+
   it('sendInvite posts to the re-send endpoint', async () => {
     post.mockResolvedValue({ user: { ...MARCUS }, status: 'INVITED' });
     const result = await sendInvite(MARCUS.id);
@@ -164,18 +187,20 @@ describe('writes', () => {
   });
 
   it('importUsers posts { users: [...] } and reads `created`', async () => {
-    post.mockResolvedValue({ created: 2, users: [] });
+    post.mockResolvedValue({ created: 3, users: [] });
     const result = await importUsers([
       { firstName: 'A', lastName: 'One', email: 'one@x.edu', role: 'student' },
       { firstName: 'B', lastName: 'Two', email: 'two@x.edu', role: 'supervisor', department: 'X' },
+      { firstName: 'C', lastName: 'Three', email: 'three@x.edu', role: 'student', program: 'MSc CS' },
     ]);
     expect(post).toHaveBeenCalledWith('/users/import', {
       users: [
         { firstName: 'A', lastName: 'One', email: 'one@x.edu', role: 'student' },
         { firstName: 'B', lastName: 'Two', email: 'two@x.edu', role: 'supervisor' },
+        { firstName: 'C', lastName: 'Three', email: 'three@x.edu', role: 'student', program: 'MSc CS' },
       ],
     });
-    expect(result.created).toBe(2);
+    expect(result.created).toBe(3);
   });
 
   it('importUsers rejects on 422 so the wizard can show row errors', async () => {
@@ -183,6 +208,34 @@ describe('writes', () => {
       new ApiError({ status: 422, code: 'VALIDATION', message: '2 rows invalid', details: [{ row: 2 }] }),
     );
     await expect(importUsers([{ firstName: 'A', lastName: 'B', email: 'bad', role: 'student' }])).rejects.toBeInstanceOf(
+      ApiError,
+    );
+  });
+
+  it('updateUser PATCHes { program } and maps the row the server stored', async () => {
+    patch.mockResolvedValue({ user: { ...MARCUS, program: 'Data Science' } });
+
+    const updated = await updateUser(MARCUS.id, { program: 'Data Science' });
+
+    expect(patch).toHaveBeenCalledWith(`/users/${MARCUS.id}`, { program: 'Data Science' });
+    expect(updated.program).toBe('Data Science');
+    expect(updated.email).toBe('m.holloway@student.edu');
+  });
+
+  it('updateUser clears the program by sending null (unaffiliated)', async () => {
+    patch.mockResolvedValue({ user: { ...MARCUS, program: null } });
+
+    const updated = await updateUser(MARCUS.id, { program: null });
+
+    expect(patch).toHaveBeenCalledWith(`/users/${MARCUS.id}`, { program: null });
+    expect(updated.program).toBeNull();
+  });
+
+  it('updateUser surfaces PATCH errors instead of faking success (Rule 3)', async () => {
+    patch.mockRejectedValue(
+      new ApiError({ status: 422, code: 'VALIDATION', message: 'Program is too long' }),
+    );
+    await expect(updateUser(MARCUS.id, { program: 'x'.repeat(300) })).rejects.toBeInstanceOf(
       ApiError,
     );
   });

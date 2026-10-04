@@ -1,8 +1,9 @@
 import { BookOpen, ChevronDown, Clock, Download, GraduationCap, MoreHorizontal, TriangleAlert, UserPlus, UsersRound } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import SampleDataBanner from '@/components/feedback/SampleDataBanner';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,7 +13,7 @@ import { downloadCsv } from '@/lib/csv';
 import { cn } from '@/lib/utils';
 import { getStudents, type StudentRow, type StudentSnapshot, type ThesisStatus } from '../data';
 
-/** Honest paging over fixture rows (spec §5.6 — page size 5 → 3 real pages). */
+/** Honest server-side paging (spec §5.6 — page size 5 → 3 real mockup pages). */
 const PAGE_SIZE = 5;
 
 const STATUS_STYLE: Record<ThesisStatus, string> = {
@@ -20,9 +21,11 @@ const STATUS_STYLE: Record<ThesisStatus, string> = {
   PROPOSED: 'border-blue-200 bg-blue-50 text-blue-600',
   DELAYED: 'border-transparent bg-danger-bg text-danger',
   COMPLETED: 'border-transparent bg-success-bg text-success',
+  ARCHIVED: 'border-transparent bg-danger-bg text-danger',
+  'NO PROJECT': 'border-transparent bg-muted text-muted-foreground',
 };
 
-/** Four aggregate cards (spec §5.6) — total/risk notes tinted per the mockup. */
+/** Four live aggregate counters (spec §5.6) — probe totals, honest notes. */
 function StudentStatCards({ stats }: { stats: StudentSnapshot['stats'] }) {
   const tiles = [
     {
@@ -34,23 +37,23 @@ function StudentStatCards({ stats }: { stats: StudentSnapshot['stats'] }) {
       noteClass: 'text-success',
     },
     {
-      label: 'Postgraduates',
-      value: stats.postgraduates.toLocaleString('en-US'),
-      note: stats.postgraduatesNote,
+      label: 'Active Students',
+      value: stats.activeStudents.toLocaleString('en-US'),
+      note: stats.activeStudentsNote,
       icon: GraduationCap,
       iconClass: 'bg-success-bg text-success',
     },
     {
-      label: 'Thesis Active',
-      value: stats.thesisActive.toLocaleString('en-US'),
-      note: stats.thesisActiveNote,
+      label: 'Active Theses',
+      value: stats.activeTheses.toLocaleString('en-US'),
+      note: stats.activeThesesNote,
       icon: BookOpen,
       iconClass: 'bg-secondary text-secondary-foreground',
     },
     {
-      label: 'Risk Alerts',
-      value: String(stats.riskAlerts).padStart(2, '0'),
-      note: stats.riskNote,
+      label: 'At Risk',
+      value: String(stats.atRisk).padStart(2, '0'),
+      note: stats.atRiskNote,
       icon: TriangleAlert,
       iconClass: 'bg-danger-bg text-danger',
       noteClass: 'text-danger',
@@ -87,38 +90,41 @@ function StudentStatCards({ stats }: { stats: StudentSnapshot['stats'] }) {
   );
 }
 
-/** Student Management screen (spec §5.6) — fixture snapshot behind an async repo. */
+/** Student Management screen (spec §5.6) — live repo read with sample fallback. */
 export default function StudentList() {
   const [snapshot, setSnapshot] = useState<StudentSnapshot | null>(null);
   const [search, setSearch] = useState('');
+  const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
 
+  // Debounced search (300ms) — keystrokes only update `search` (§5.6).
+  useEffect(() => {
+    const timer = setTimeout(() => setQ(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Server-driven paging + search: the repo is the data boundary (spec §4).
   useEffect(() => {
     let alive = true;
-    void getStudents().then((next) => {
-      if (alive) setSnapshot(next);
+    setLoading(true);
+    void getStudents({ page, limit: PAGE_SIZE, q }).then((next) => {
+      if (alive) {
+        setSnapshot(next);
+        setLoading(false);
+      }
     });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [q, page]);
 
-  // Local search over the fixture rows (spec §5.6).
-  const rows = useMemo(() => {
-    const items = snapshot?.rows ?? [];
-    const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (row) =>
-        row.name.toLowerCase().includes(q) ||
-        row.code.toLowerCase().includes(q) ||
-        row.email.toLowerCase().includes(q),
-    );
-  }, [snapshot, search]);
-
-  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  // Rows arrive already filtered + paged for the current `q`/`page`.
+  const rows = snapshot?.rows ?? [];
+  const total = snapshot?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const current = Math.min(page, pageCount);
-  const pageRows = rows.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const pageRows = rows;
 
   const onSearch = (value: string) => {
     setSearch(value);
@@ -128,15 +134,15 @@ export default function StudentList() {
   const exportCsv = () => {
     downloadCsv(
       'thesistrack-students.csv',
-      ['Name', 'Student ID', 'Email', 'Level', 'Department', 'Thesis Status', 'Enrolled', 'Supervisor'],
-      rows.map((row) => [
+      ['Name', 'Student ID', 'Email', 'Program', 'Status', 'Thesis Status', 'Enrolled', 'Supervisor'],
+      pageRows.map((row) => [
         row.name,
         row.code,
         row.email,
-        row.level,
-        row.department,
+        row.program,
+        row.status,
         row.thesisStatus,
-        row.enrolledYear,
+        row.enrolledYear ?? '',
         row.supervisor,
       ]),
     );
@@ -182,13 +188,20 @@ export default function StudentList() {
         </div>
       </header>
 
+      {/* Sample-data banner while the repo is in fixture fallback (§10.4). */}
+      {snapshot?.usedFallback && (
+        <div className="mt-6">
+          <SampleDataBanner />
+        </div>
+      )}
+
       {stats && (
         <>
           <div className="mt-6">
             <StudentStatCards stats={stats} />
           </div>
 
-          {/* Student Directory section header + local search (spec §5.6). */}
+          {/* Student Directory section header + debounced server search (spec §5.6). */}
           <Card className="mt-4">
             <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -280,7 +293,8 @@ export default function StudentList() {
               <Pagination
                 page={current}
                 pageCount={pageCount}
-                footer={`Showing ${pageRows.length} of ${rows.length} students`}
+                loading={loading}
+                footer={`Showing ${pageRows.length} of ${total} students`}
                 onPageChange={setPage}
               />
             </div>
@@ -351,11 +365,11 @@ function StudentRowView({ row, onAction }: { row: StudentRow; onAction: () => vo
         </div>
       </td>
       <td className="px-3 py-3.5">
-        <p className="text-sm font-medium text-foreground">{row.level}</p>
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
           <GraduationCap className="size-3.5 shrink-0" aria-hidden="true" />
-          {row.department}
+          <span className="truncate">{row.program}</span>
         </p>
+        <p className="text-xs text-muted-foreground">{row.status}</p>
       </td>
       <td className="px-3 py-3.5">
         <span
@@ -368,7 +382,7 @@ function StudentRowView({ row, onAction }: { row: StudentRow; onAction: () => vo
         </span>
         <p className="mt-1 flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-foreground">
           <Clock className="size-3" aria-hidden="true" />
-          Enrolled {row.enrolledYear}
+          Enrolled {row.enrolledYear ?? '—'}
         </p>
       </td>
       <td className="px-3 py-3.5">

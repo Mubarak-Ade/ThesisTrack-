@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import SampleDataBanner from '@/components/feedback/SampleDataBanner';
 import { getDashboard } from '../data';
 import type { DashboardData } from '../data/types';
 import { exportWorkspaceCsv } from '../lib/exportWorkspace';
@@ -16,7 +16,7 @@ import WorkspaceTable from '../components/WorkspaceTable';
 
 /**
  * Coordinator Dashboard (spec §5.1) — all figures come from `dashboardRepo`
- * (no dashboard endpoint exists; everything here is fixture-backed).
+ * (live API first; fixture fallback announces itself via SampleDataBanner).
  */
 export default function CoordinatorDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -56,9 +56,6 @@ export default function CoordinatorDashboard() {
           >
             Export Data
           </Button>
-          <Button type="button" onClick={() => toast.info('New Project is not available yet')}>
-            + New Project
-          </Button>
         </div>
       </header>
 
@@ -69,6 +66,8 @@ export default function CoordinatorDashboard() {
         </div>
       ) : (
         <div className="mt-6 space-y-4">
+          {/* Fixture fallback announces itself (§10.4). */}
+          {data.usedFallback && <SampleDataBanner />}
           {/* Stat cards */}
           <div className="grid gap-4 sm:grid-cols-2">
             <ProjectProgressCard project={data.project} />

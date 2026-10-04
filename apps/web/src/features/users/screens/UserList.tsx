@@ -7,7 +7,7 @@ import { Download, UserPlus } from 'lucide-react';
 import type { ConsoleStats, Role, SecurityLog, UsersPage } from '../data/types';
 import { getStats, listSecurityLogs, listUsers } from '../data/usersRepo';
 import Pagination from '@/components/ui/pagination';
-import SampleDataBanner from '../components/SampleDataBanner';
+import SampleDataBanner from '@/components/feedback/SampleDataBanner';
 import SecurityLogsRail from '../components/SecurityLogsRail';
 import StatCards from '../components/StatCards';
 import UsersTable, { type SortKey, type SortState } from '../components/UsersTable';

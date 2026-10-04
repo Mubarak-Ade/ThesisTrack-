@@ -9,4 +9,5 @@ export {
   listSecurityLogs,
   listUsers,
   sendInvite,
+  updateUser,
 } from './usersRepo';

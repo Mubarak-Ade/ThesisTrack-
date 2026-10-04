@@ -1,6 +1,11 @@
 import { AlertTriangle } from 'lucide-react';
 
-/** "Showing sample data" notice while a read is in mock-fallback (spec Rule 3). */
+/**
+ * "Showing sample data" notice while a read is in fixture-fallback (§10.4:
+ * reads may fall back to fixtures *with a visible banner*; writes never do).
+ * Lives with the shared feedback chrome because every feature's repository
+ * can end up behind it — it is not the user-management screen's own widget.
+ */
 export default function SampleDataBanner() {
   return (
     <div
@@ -11,7 +16,7 @@ export default function SampleDataBanner() {
       <p>
         <strong className="font-semibold">Showing sample data.</strong>{' '}
         <span className="text-muted-foreground">
-          The live directory is temporarily unreachable — figures below are illustrative.
+          Live data is temporarily unreachable — figures below are illustrative.
         </span>
       </p>
     </div>

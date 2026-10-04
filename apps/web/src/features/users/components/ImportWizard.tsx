@@ -24,11 +24,13 @@ import { ROLES } from '../data/constants';
 import type { ImportRow } from '../data/types';
 import { importUsers } from '../data/usersRepo';
 
-type TargetField = 'firstName' | 'lastName' | 'email' | 'role' | 'department';
+type TargetField = 'firstName' | 'lastName' | 'email' | 'role' | 'department' | 'program';
 type Mapping = Record<TargetField, number | null>;
 type Step = 1 | 2 | 3 | 4;
 
 const REQUIRED: TargetField[] = ['firstName', 'lastName', 'email', 'role'];
+/** Optional §11.0.2 column — unmapped/blank rows simply omit the key. */
+const OPTIONAL: TargetField[] = ['department', 'program'];
 
 const FIELD_LABEL: Record<TargetField, string> = {
   firstName: 'First name',
@@ -36,6 +38,7 @@ const FIELD_LABEL: Record<TargetField, string> = {
   email: 'Email',
   role: 'Role',
   department: 'Department',
+  program: 'Program',
 };
 
 const STEPS: { step: Step; label: string }[] = [
@@ -55,11 +58,19 @@ function guessField(header: string): TargetField | '' {
   if (h.includes('last') || h.includes('surname') || h === 'familyname') return 'lastName';
   if (h.includes('role')) return 'role';
   if (h.includes('dept') || h.includes('department')) return 'department';
+  if (h.includes('program')) return 'program';
   return '';
 }
 
 function autoMap(headers: string[]): Mapping {
-  const mapping: Mapping = { firstName: null, lastName: null, email: null, role: null, department: null };
+  const mapping: Mapping = {
+    firstName: null,
+    lastName: null,
+    email: null,
+    role: null,
+    department: null,
+    program: null,
+  };
   headers.forEach((header, index) => {
     const target = guessField(header);
     if (target && mapping[target] === null) mapping[target] = index;
@@ -87,6 +98,8 @@ function validateRows(rows: string[][], mapping: Mapping): ValidatedRow[] {
     const email = pick('email').toLowerCase();
     const roleRaw = pick('role').toLowerCase();
     const department = pick('department');
+    // §11.0.2 delta — optional; blank cell means unaffiliated (ADR-16 fallback).
+    const program = pick('program');
 
     if (!firstName) errors.push('First name is required');
     if (!lastName) errors.push('Last name is required');
@@ -96,20 +109,31 @@ function validateRows(rows: string[][], mapping: Mapping): ValidatedRow[] {
     else if (!(ROLES as readonly string[]).includes(roleRaw)) {
       errors.push(`Unknown role "${pick('role')}" — expected Student, Supervisor or Administrator`);
     }
+    if (program.length > 255) errors.push('Program must be 255 characters or fewer');
+
+    const values: ImportRow = {
+      firstName,
+      lastName,
+      email,
+      role: roleRaw as ImportRow['role'],
+      department,
+    };
+    if (program) values.program = program;
 
     return {
       index: offset + 1,
       cells,
-      values: errors.length === 0 ? { firstName, lastName, email, role: roleRaw as ImportRow['role'], department } : null,
+      values: errors.length === 0 ? values : null,
       errors,
     };
   });
 }
 
-const TEMPLATE_HEADERS = ['firstName', 'lastName', 'email', 'role', 'department'];
+const TEMPLATE_HEADERS = ['firstName', 'lastName', 'email', 'role', 'department', 'program'];
 
 function sampleRows(count: number): (string | number)[][] {
   const departments = ['Informatics', 'Computer Science', 'Software Engineering'];
+  const programs = ['MSc Computer Science', 'MSc Data Science', 'BSc Software Engineering'];
   const people = [
     ['Aisha', 'Bello'],
     ['Tomas', 'Novak'],
@@ -128,6 +152,7 @@ function sampleRows(count: number): (string | number)[][] {
       `${first[0].toLowerCase()}.${last.toLowerCase()}${i > 7 ? i : ''}@sample.edu`,
       i % 3 === 0 ? 'supervisor' : 'student',
       departments[i % departments.length],
+      i % 2 === 0 ? programs[i % programs.length] : '',
     ];
   });
 }
@@ -147,6 +172,7 @@ export default function ImportWizard() {
     email: null,
     role: null,
     department: null,
+    program: null,
   });
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState<{ message: string; details?: unknown } | null>(null);
@@ -159,7 +185,7 @@ export default function ImportWizard() {
 
   const downloadTemplate = () =>
     downloadCsv('thesistrack-import-template.csv', TEMPLATE_HEADERS, [
-      ['Marcus', 'Holloway', 'm.holloway@student.edu', 'student', 'Informatics'],
+      ['Marcus', 'Holloway', 'm.holloway@student.edu', 'student', 'Informatics', 'MSc Computer Science'],
     ]);
 
   const downloadSample = () =>
@@ -299,7 +325,8 @@ export default function ImportWizard() {
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
-                Required columns: first name, last name, email, role. Department is optional.
+                Required columns: first name, last name, email, role. Department and program are
+                optional.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" onClick={downloadTemplate}>
@@ -330,7 +357,7 @@ export default function ImportWizard() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              {REQUIRED.concat('department').map((field) => (
+              {REQUIRED.concat(OPTIONAL).map((field) => (
                 <div key={field} className="space-y-1.5">
                   <label
                     htmlFor={`map-${field}`}
@@ -411,6 +438,7 @@ export default function ImportWizard() {
                     <th scope="col" className="px-3 py-2.5 font-bold">Name</th>
                     <th scope="col" className="px-3 py-2.5 font-bold">Email</th>
                     <th scope="col" className="px-3 py-2.5 font-bold">Role</th>
+                    <th scope="col" className="px-3 py-2.5 font-bold">Program</th>
                     <th scope="col" className="px-3 py-2.5 font-bold">Status</th>
                   </tr>
                 </thead>
@@ -436,6 +464,12 @@ export default function ImportWizard() {
                       </td>
                       <td className="px-3 py-2.5 text-muted-foreground">
                         {row.values?.role ?? row.cells[mapping.role ?? -1] ?? '—'}
+                      </td>
+                      <td className="px-3 py-2.5 text-muted-foreground">
+                        {row.values?.program ??
+                          (mapping.program === null
+                            ? '—'
+                            : row.cells[mapping.program]?.trim() || '—')}
                       </td>
                       <td className="px-3 py-2.5">
                         {row.errors.length === 0 ? (

@@ -70,6 +70,8 @@ export function mapUserDto(value: unknown): ConsoleUser {
     isActive,
     createdAt: nullableStr(r.createdAt),
     registrationNumber: nullableStr(r.registrationNumber),
+    // §11.0.2 delta — missing/non-string → null (unaffiliated, §11.0.2/ADR-16).
+    program: nullableStr(r.program),
   };
 }
 
@@ -116,21 +118,31 @@ export function mapImportResult(value: unknown): { created: number } {
   throw new Error('POST /users/import: result shape changed');
 }
 
-/** Form input → API body. Drops UI-only fields (§A: create takes 4 fields). */
-export function toCreateBody(
-  input: CreateUserInput | ImportRow,
-): { firstName: string; lastName: string; email: string; role: Role } {
-  return {
+/** Request body for `POST /users` and each `/users/import` row (§A + §11.0.2). */
+export interface CreateBody {
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: Role;
+  /** §11.0.2 delta — key omitted entirely when no non-blank program was given. */
+  program?: string;
+}
+
+/** Form input → API body. Drops UI-only fields (§A: create takes 4 fields + program). */
+export function toCreateBody(input: CreateUserInput | ImportRow): CreateBody {
+  const body: CreateBody = {
     firstName: input.firstName.trim(),
     lastName: input.lastName.trim(),
     email: input.email.trim().toLowerCase(),
     role: input.role,
   };
+  // §11.0.2: blank = unaffiliated — omit the key rather than send `program: ''`.
+  const program = input.program?.trim();
+  if (program) body.program = program;
+  return body;
 }
 
-export function toImportPayload(
-  rows: ImportRow[],
-): { users: ReturnType<typeof toCreateBody>[] } {
+export function toImportPayload(rows: ImportRow[]): { users: CreateBody[] } {
   return { users: rows.map(toCreateBody) };
 }
 

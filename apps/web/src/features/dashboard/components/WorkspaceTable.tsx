@@ -13,6 +13,7 @@ const STATUS_BADGE: Record<WorkspaceStatus, { variant: 'default' | 'secondary' |
   'PENDING REVIEW': { variant: 'secondary' },
   DELAYED: { variant: 'danger' },
   COMPLETED: { variant: 'success' },
+  ARCHIVED: { variant: 'secondary', className: 'bg-muted text-muted-foreground' },
 };
 
 interface WorkspaceTableProps {
@@ -61,26 +62,29 @@ export default function WorkspaceTable({ rows, total }: WorkspaceTableProps) {
               {rows.map((row) => {
                 const badge = STATUS_BADGE[row.status] ?? { variant: 'secondary' as const };
                 return (
-                  <tr key={`${row.student}-${row.code}`} className="border-b border-border/70 transition-colors last:border-0 hover:bg-surface-alt/60">
+                  <tr key={row.id} className="border-b border-border/70 transition-colors last:border-0 hover:bg-surface-alt/60">
                     <td className="px-4 py-3.5 align-top sm:px-5">
                       <span className="flex items-center gap-2.5">
                         <Avatar size="sm" />
                         <span className="min-w-0">
                           <span className="block whitespace-nowrap font-medium text-foreground">{row.student}</span>
-                          <span className="block whitespace-nowrap text-xs text-muted-foreground">{row.code}</span>
+                          {/* Live rows have no thesis code — the cell disappears. */}
+                          {row.code !== undefined && (
+                            <span className="block whitespace-nowrap text-xs text-muted-foreground">{row.code}</span>
+                          )}
                         </span>
                       </span>
                     </td>
                     <td className="px-3 py-3.5 align-top">
                       <span className="block text-foreground/90">{row.project}</span>
-                      <span className="block text-xs text-muted-foreground">{row.phase}</span>
+                      <span className="block text-xs text-muted-foreground">{row.phase ?? '—'}</span>
                     </td>
                     <td className="px-3 py-3.5 align-top">
                       <Badge variant={badge.variant} className={cn('whitespace-nowrap text-[11px]', badge.className)}>
                         {row.status}
                       </Badge>
                     </td>
-                    <td className="px-3 py-3.5 align-top text-muted-foreground">{row.supervisor}</td>
+                    <td className="px-3 py-3.5 align-top text-muted-foreground">{row.supervisor ?? '—'}</td>
                     <td className="px-2 py-3.5 align-top text-right">
                       <button
                         type="button"
@@ -98,16 +102,16 @@ export default function WorkspaceTable({ rows, total }: WorkspaceTableProps) {
           </table>
         </div>
 
-        {/* Footer: honest row count + directory link (spec §5.1). */}
+        {/* Footer: honest row count + projects link (spec §5.1). */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-4 sm:px-6">
           <p className="text-sm text-muted-foreground">
             Showing {rows.length} of {total} projects
           </p>
           <Link
-            to="/users"
+            to="/projects"
             className="text-sm font-semibold text-primary transition-colors hover:underline"
           >
-            View Full Directory ›
+            View all projects ›
           </Link>
         </div>
       </CardContent>

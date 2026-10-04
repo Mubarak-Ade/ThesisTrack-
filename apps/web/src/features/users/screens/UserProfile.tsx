@@ -6,6 +6,9 @@ import { toast } from 'sonner';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import FormMessage from '@/components/forms/FormMessage';
 import { ApiError } from '@/lib/api/http';
 import ContactCard from '../components/ContactCard';
 import StatusBadge from '../components/StatusBadge';
@@ -16,8 +19,8 @@ import {
   ThesisAssignments,
 } from '../components/ProfileRails';
 import { ROLE_LABELS } from '../data/constants';
-import type { UserDetail } from '../data/types';
-import { getUser, sendInvite } from '../data/usersRepo';
+import type { ConsoleUser, UserDetail } from '../data/types';
+import { getUser, sendInvite, updateUser } from '../data/usersRepo';
 
 function titleCaseRole(role: string): string {
   return ROLE_LABELS[role as keyof typeof ROLE_LABELS] ?? role.charAt(0).toUpperCase() + role.slice(1);
@@ -50,6 +53,112 @@ function NotFound() {
 /** Fixture counters in the header card (spec §5.4). */
 const MILESTONES = '14';
 const DEPT_FALLBACK = 'Informatics & AI';
+
+/** Honest helper copy for the §11.0.2 `program` field (ADR-16 auto-match). */
+const PROGRAM_HINT =
+  'ADR-16: the student’s program selects their workflow at approval; blank = default workflow.';
+
+/**
+ * §11.0.2 `program` (ADR-16 workflow auto-match key): read-only until "Edit".
+ * Blank on save → `null` (clears it); failures render inline and the editor
+ * stays open — writes never fake success (Rule 3).
+ */
+function ProgramPanel({
+  detail,
+  onUpdated,
+}: {
+  detail: UserDetail;
+  onUpdated: (user: ConsoleUser) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(detail.program ?? '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const cancel = () => {
+    setDraft(detail.program ?? '');
+    setError(null);
+    setEditing(false);
+  };
+
+  const save = async () => {
+    const trimmed = draft.trim();
+    const program = trimmed === '' ? null : trimmed;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateUser(detail.id, { program });
+      onUpdated(updated);
+      setEditing(false);
+      toast.success('Program updated');
+    } catch (cause) {
+      setError(
+        cause instanceof ApiError
+          ? cause.message
+          : 'Unable to save the program. Check your connection and try again.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              Workflow
+            </p>
+            <h2 className="mt-1 font-display text-lg font-bold text-foreground">
+              Program (workflow match)
+            </h2>
+          </div>
+          {!editing && (
+            <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
+              <Pencil aria-hidden="true" />
+              Edit
+            </Button>
+          )}
+        </div>
+
+        {editing ? (
+          <div className="mt-4 space-y-2">
+            <Label
+              htmlFor="up-program"
+              className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            >
+              Program
+            </Label>
+            <Input
+              id="up-program"
+              value={draft}
+              maxLength={255}
+              placeholder="e.g. MSc Computer Science"
+              aria-invalid={!!error}
+              onChange={(event) => setDraft(event.target.value)}
+            />
+            <p className="text-xs italic text-muted-foreground">{PROGRAM_HINT}</p>
+            {error && <FormMessage>{error}</FormMessage>}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button type="button" size="sm" onClick={() => void save()} disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={cancel} disabled={saving}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="mt-3 break-words text-sm text-foreground">{detail.program ?? '—'}</p>
+            <p className="mt-1.5 text-xs italic text-muted-foreground">{PROGRAM_HINT}</p>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 /** User Profile (spec §5.4): live core + fixture rails; Reset Password = re-invite. */
 export default function UserProfile() {
@@ -211,6 +320,11 @@ export default function UserProfile() {
               <ActivityFeed detail={detail} />
             </div>
             <div className="space-y-4">
+              <ProgramPanel
+                key={detail.id}
+                detail={detail}
+                onUpdated={(user) => setDetail((prev) => (prev ? { ...prev, ...user } : prev))}
+              />
               <ContactCard detail={detail} />
               <AdminOversight detail={detail} />
             </div>

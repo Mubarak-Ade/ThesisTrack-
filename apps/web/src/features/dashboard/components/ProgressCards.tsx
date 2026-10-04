@@ -6,8 +6,14 @@ import type { DepartmentProgress, ProjectProgress } from '../data/types';
 interface Segment {
   label: string;
   value: number;
-  tone: 'success' | 'danger';
+  tone: 'success' | 'danger' | 'neutral';
 }
+
+const TONE_CLASS: Record<Segment['tone'], string> = {
+  success: 'text-success',
+  danger: 'text-danger',
+  neutral: 'text-foreground',
+};
 
 function StatCard({
   title,
@@ -46,12 +52,7 @@ function StatCard({
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 {segment.label}
               </span>
-              <strong
-                className={cn(
-                  'font-display text-base font-bold',
-                  segment.tone === 'success' ? 'text-success' : 'text-danger',
-                )}
-              >
+              <strong className={cn('font-display text-base font-bold', TONE_CLASS[segment.tone])}>
                 {segment.value}
               </strong>
             </span>
@@ -72,7 +73,7 @@ export function ProjectProgressCard({ project }: { project: ProjectProgress }) {
       segments={[
         { label: 'Active', value: project.active, tone: 'success' },
         { label: 'Completed', value: project.completed, tone: 'success' },
-        { label: 'At Risk', value: project.atRisk, tone: 'danger' },
+        { label: 'Archived', value: project.archived, tone: 'neutral' },
       ]}
     />
   );
@@ -82,12 +83,12 @@ export function DepartmentProgressCard({ department }: { department: DepartmentP
   return (
     <StatCard
       title="Department Progress"
-      kicker="Student Allocation Overview"
+      kicker="Department Overview"
       totalLabel="Students"
       value={department.students}
       segments={[
-        { label: 'Assigned', value: department.assigned, tone: 'success' },
-        { label: 'Unassigned', value: department.unassigned, tone: 'danger' },
+        { label: 'Faculty', value: department.faculty, tone: 'success' },
+        { label: 'Awaiting review', value: department.awaiting, tone: 'danger' },
       ]}
     />
   );

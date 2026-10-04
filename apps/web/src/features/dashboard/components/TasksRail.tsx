@@ -50,7 +50,7 @@ function CriticalCard({ task }: { task: CriticalTask }) {
       <Button
         type="button"
         size="sm"
-        onClick={() => navigate('/faculty')}
+        onClick={() => navigate(task.to ?? '/faculty')}
         className="mt-3 bg-white text-danger hover:bg-white/90 hover:text-danger"
       >
         {task.cta}

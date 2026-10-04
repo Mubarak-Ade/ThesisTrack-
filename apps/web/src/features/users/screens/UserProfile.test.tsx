@@ -2,13 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
+import { ApiError } from '@/lib/api/http';
 import type { UserDetail } from '../data/types';
-import { getUser, sendInvite } from '../data/usersRepo';
+import { getUser, sendInvite, updateUser } from '../data/usersRepo';
 import UserProfile from './UserProfile';
 
 vi.mock('../data/usersRepo', () => ({
   getUser: vi.fn(),
   sendInvite: vi.fn(),
+  updateUser: vi.fn(),
 }));
 
 vi.mock('sonner', () => ({
@@ -28,6 +30,7 @@ const DETAIL: UserDetail = {
   isActive: true,
   createdAt: '2023-09-12T09:00:00.000Z',
   registrationNumber: 'STU-2023-0457',
+  program: 'MSc Computer Science',
   department: 'Informatics',
   lastLoginLabel: '5 hours ago',
   extras: {
@@ -127,5 +130,82 @@ describe('UserProfile (plan 6)', () => {
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith('Unable to re-send the invitation. Try again.'),
     );
+  });
+});
+
+describe('UserProfile program edit (task 13.7 — §11.0.2 / ADR-16)', () => {
+  it('shows the program read-only with an Edit affordance and honest helper copy', async () => {
+    vi.mocked(getUser).mockResolvedValue(DETAIL);
+
+    renderProfile();
+
+    expect(await screen.findByText('MSc Computer Science')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.getByText(/ADR-16: the student/)).toBeInTheDocument();
+    expect(screen.getByText(/blank = default workflow/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Program')).not.toBeInTheDocument();
+  });
+
+  it('saves an edited program through PATCH /users/:id', async () => {
+    vi.mocked(getUser).mockResolvedValue(DETAIL);
+    vi.mocked(updateUser).mockResolvedValue({ ...DETAIL, program: 'Data Science' });
+
+    renderProfile();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Program'), { target: { value: 'Data Science' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(DETAIL.id, { program: 'Data Science' }),
+    );
+    expect(toast.success).toHaveBeenCalledWith('Program updated');
+    // Back to read-only with the stored value.
+    expect(await screen.findByText('Data Science')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+
+  it('clears the program (sends null) when the field is saved blank', async () => {
+    vi.mocked(getUser).mockResolvedValue(DETAIL);
+    vi.mocked(updateUser).mockResolvedValue({ ...DETAIL, program: null });
+
+    renderProfile();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Program'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(updateUser).toHaveBeenCalledWith(DETAIL.id, { program: null }));
+    expect(toast.success).toHaveBeenCalledWith('Program updated');
+  });
+
+  it('surfaces a failed program PATCH inline and never fakes success (Rule 3)', async () => {
+    vi.mocked(getUser).mockResolvedValue(DETAIL);
+    vi.mocked(updateUser).mockRejectedValue(
+      new ApiError({ status: 422, code: 'VALIDATION', message: 'Program is too long' }),
+    );
+
+    renderProfile();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Program'), { target: { value: 'Data Science' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('Program is too long')).toBeInTheDocument();
+    // The editor stays open on the entered value — no optimistic success.
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Program')).toHaveValue('Data Science');
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it('falls back to connection copy for non-ApiError failures', async () => {
+    vi.mocked(getUser).mockResolvedValue(DETAIL);
+    vi.mocked(updateUser).mockRejectedValue(new Error('offline'));
+
+    renderProfile();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(
+      await screen.findByText(/unable to save the program/i),
+    ).toBeInTheDocument();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });

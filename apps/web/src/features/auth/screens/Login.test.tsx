@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 import App from '@/app/router/App';
 import { client } from '@/lib/api/http';
@@ -44,7 +45,13 @@ const envelopeError = (code: string, message: string, status: number) => ({
 const renderLogin = () =>
   render(
     <MemoryRouter initialEntries={['/login']}>
-      <App />
+      {/* Production parity (main.tsx): the console shell's TanStack Query
+          reads (§10.4) need a provider — one fresh client per render. */}
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <App />
+      </QueryClientProvider>
     </MemoryRouter>,
   );
 
@@ -75,6 +82,24 @@ describe('login (plan 4.1)', () => {
           data: { success: true, data: { accessToken: 'tok', expiresIn: 900, user } },
         };
       }
+      // The role-resolved shell fetches these right after landing on
+      // /dashboard (§10.4) — benign reads, or the global 401 handling would
+      // tear the brand-new session down mid-assertion. The dashboard's own
+      // bundle rides the same adapter (Phase 11 student dashboard): it asks
+      // for the assignment plus paged proposals/projects, all empty here so
+      // the six-state resolver lands on State 0.
+      if (config.url?.startsWith('/projects')) {
+        return { status: 200, data: { success: true, data: { projects: [] } } };
+      }
+      if (config.url?.startsWith('/proposals')) {
+        return { status: 200, data: { success: true, data: { proposals: [] } } };
+      }
+      if (config.url?.startsWith('/students/')) {
+        return { status: 200, data: { success: true, data: { active: null, history: [] } } };
+      }
+      if (config.url === '/notifications/unread-count') {
+        return { status: 200, data: { success: true, data: { unreadCount: 0 } } };
+      }
       return envelopeError('UNAUTHORIZED', 'no session', 401);
     });
 
@@ -83,8 +108,13 @@ describe('login (plan 4.1)', () => {
     fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
 
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: 'Coordinator Dashboard' })).toBeTruthy(),
+      // /dashboard resolves by role since §10.3: this student lands on the
+      // role-resolved student dashboard (six-state screen, §16.2). With no
+      // supervisor assigned yet the resolver returns State 0, whose h1 is
+      // the §16.2 "Welcome" copy.
+      expect(screen.getByRole('heading', { name: 'Welcome' })).toBeTruthy(),
     );
+    expect(screen.getByText(/assigning you a supervisor/i)).toBeTruthy(); // State 0 body
     expect(screen.getByText('Benjamin S. Thompson')).toBeTruthy(); // sidebar footer
     expect(useAuthStore.getState().status).toBe('authenticated');
     expect(useAuthStore.getState().accessToken).toBe('tok');

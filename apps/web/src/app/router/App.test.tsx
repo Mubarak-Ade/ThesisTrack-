@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
 import App from './App';
 import { AuthProvider, resetAuthBoot } from '@/app/providers/AuthProvider';
@@ -13,7 +14,9 @@ const user: PublicUser = {
   email: 'benjamin.thompson@university.edu',
   firstName: 'Benjamin S.',
   lastName: 'Thompson',
-  role: 'student',
+  // §10.3 resolves /dashboard by role — this session is the administrator
+  // that Coordinator Dashboard belongs to (Login.test covers the student).
+  role: 'administrator',
   isActive: true,
   createdAt: '2026-09-01T00:00:00.000Z',
 };
@@ -60,9 +63,15 @@ const authorized = (config: InternalAxiosRequestConfig) => {
 const renderAt = (path: string) =>
   render(
     <MemoryRouter initialEntries={[path]}>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
+      {/* Production parity (main.tsx): the shell's TanStack Query reads
+          (§10.4) need a provider — one fresh client per render. */}
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </QueryClientProvider>
     </MemoryRouter>,
   );
 
@@ -97,8 +106,8 @@ describe('routing (spec §3)', () => {
     expect(screen.getByText('Benjamin S. Thompson')).toBeTruthy();
     const sidebar = document.querySelector('aside[aria-label="Sidebar"]');
     expect(sidebar).toBeTruthy();
-    // Scoped to the sidebar: the workspace table has its own "Student" header.
-    expect(within(sidebar as HTMLElement).getByText('Student')).toBeTruthy();
+    // Scoped to the sidebar: the workspace table has its own headers.
+    expect(within(sidebar as HTMLElement).getByText('Administrator')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sign Out' })).toBeTruthy();
 
     client.defaults.adapter = originalAdapter;
@@ -114,12 +123,15 @@ describe('routing (spec §3)', () => {
     client.defaults.adapter = originalAdapter;
   });
 
-  it('unknown paths fall back to / → /dashboard → guard', async () => {
+  it('unknown paths render the 404 screen (§16.1 Not-found chrome)', async () => {
     installAdapter(unauthorized);
 
     renderAt('/no-such-page');
 
-    await waitFor(() => expect(screen.getByText('Sign in required')).toBeTruthy());
+    // No silent bounce to / anymore — the wildcard renders the 404 screen,
+    // and it does so publicly (no session required to report a missing page).
+    await waitFor(() => expect(screen.getByText('Page not found')).toBeTruthy());
+    expect(screen.getByText(/Back to home/i)).toBeTruthy();
 
     client.defaults.adapter = originalAdapter;
   });

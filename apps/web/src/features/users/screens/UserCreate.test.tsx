@@ -98,6 +98,7 @@ describe('UserCreate (plan 5)', () => {
         isActive: false,
         createdAt: '2026-09-25T00:00:00.000Z',
         registrationNumber: null,
+        program: null,
       },
       status: 'INVITED',
     };
@@ -120,9 +121,55 @@ describe('UserCreate (plan 5)', () => {
       role: 'student',
       department: 'Informatics',
     });
+    // §11.0.2: a blank program is unaffiliated — the key never leaves the browser.
+    expect(vi.mocked(createUser).mock.calls[0]![0]).not.toHaveProperty('program');
 
     // Lands on the profile route.
     expect(await screen.findByText('Profile loaded')).toBeInTheDocument();
+  });
+
+  it('sends the optional program when one is entered (§11.0.2 / ADR-16)', async () => {
+    const created: CreatedUser = {
+      user: {
+        id: '99999999-9999-4999-8999-999999999999',
+        firstName: 'Console',
+        lastName: 'E2E',
+        email: 'console-e2e@test.local',
+        role: 'student',
+        status: 'INVITED',
+        isActive: false,
+        createdAt: '2026-09-25T00:00:00.000Z',
+        registrationNumber: null,
+        program: 'Data Science',
+      },
+      status: 'INVITED',
+    };
+    vi.mocked(createUser).mockResolvedValue(created);
+
+    renderCreate();
+    fillIdentity();
+    fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
+    fireEvent.change(screen.getByLabelText('Program'), { target: { value: 'Data Science' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add User' }));
+
+    await waitFor(() => expect(createUser).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(createUser).mock.calls[0]![0]).toMatchObject({ program: 'Data Science' });
+    expect(await screen.findByText('Profile loaded')).toBeInTheDocument();
+  });
+
+  it('enforces the 255-character program cap client-side', async () => {
+    renderCreate();
+    fillIdentity();
+    fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
+    fireEvent.change(screen.getByLabelText('Program'), { target: { value: 'x'.repeat(256) } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create User Profile' }));
+
+    expect(
+      await screen.findByText('Program must be 255 characters or fewer'),
+    ).toBeInTheDocument();
+    expect(createUser).not.toHaveBeenCalled();
   });
 
   it('surfaces API write errors inline instead of faking success (Rule 3)', async () => {

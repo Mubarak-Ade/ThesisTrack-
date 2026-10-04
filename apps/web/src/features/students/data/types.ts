@@ -1,33 +1,46 @@
 /**
- * Student Management models (spec §5.6). No enrollment/directory endpoint
- * exists — `studentsRepo` serves fixtures behind the same async shape a live
- * repo would use, so a future endpoint drops in behind one function
- * (spec §4 Rule 1). Screens import only from `data/index`.
+ * Student Management models (spec §5.6). `studentsRepo` reads
+ * `GET /users?role=student` live first (with project/supervisor joins and
+ * `limit=1` stat probes) and falls back to the fixture snapshot on any error,
+ * flagged via `usedFallback` for the sample banner (spec §4 Rule 1, §10.4).
+ * Screens import only from `data/index`.
  */
 
-export type ThesisStatus = 'IN PROGRESS' | 'PROPOSED' | 'DELAYED' | 'COMPLETED';
+export type ThesisStatus =
+  | 'IN PROGRESS'
+  | 'PROPOSED'
+  | 'DELAYED'
+  | 'COMPLETED'
+  /** Project row exists but is archived (live read). */
+  | 'ARCHIVED'
+  /** No project row for this student yet (live read). */
+  | 'NO PROJECT';
 
 export interface StudentRow {
   name: string;
-  /** Mockup-style code (STU-2024-001) — fixtures only, like USR codes (spec §4). */
+  /** Display code — fixtures keep mockup STU-2024-001; live derives STU-XXXX from the id. */
   code: string;
   email: string;
-  level: string;
-  department: string;
+  /** §8.7 program — 'Unaffiliated' when the account carries none (ADR-11: no departments). */
+  program: string;
+  /** Account state (`isActive`) — there is no department column in the API. */
+  status: 'Active' | 'Inactive';
   thesisStatus: ThesisStatus;
-  enrolledYear: number;
+  /** Year parsed from the account's `createdAt`; null when unreadable. */
+  enrolledYear: number | null;
   supervisor: string;
 }
 
+/** Four live stat probes (spec §5.6) — notes are static copy, see fixtures. */
 export interface StudentStats {
   total: number;
   totalNote: string;
-  postgraduates: number;
-  postgraduatesNote: string;
-  thesisActive: number;
-  thesisActiveNote: string;
-  riskAlerts: number;
-  riskNote: string;
+  activeStudents: number;
+  activeStudentsNote: string;
+  activeTheses: number;
+  activeThesesNote: string;
+  atRisk: number;
+  atRiskNote: string;
 }
 
 /** Bottom info cards — navigation affordances rendered by the screen. */
@@ -43,6 +56,11 @@ export interface InfoCard {
 
 export interface StudentSnapshot {
   stats: StudentStats;
+  /** Rows for the requested page only — paging/search happen server-side. */
   rows: StudentRow[];
+  /** Full (or filtered) row count behind `page` — drives the pager. */
+  total: number;
   infoCards: InfoCard[];
+  /** True when fixtures answered (§10.4 — screen shows SampleDataBanner). */
+  usedFallback: boolean;
 }

@@ -3,16 +3,23 @@ import { Outlet } from 'react-router-dom';
 import { Toaster } from 'sonner';
 
 import { cn } from '@/lib/utils';
+import type { NavItem } from './console/nav';
 import ConsoleFooter from './console/ConsoleFooter';
 import Sidebar from './console/Sidebar';
 import Topbar from './console/Topbar';
 
+interface ConsoleLayoutProps {
+  /** The role's §10.5 nav column — RoleShell resolves it (§10.3). */
+  nav: NavItem[];
+}
+
 /**
- * Admin-console shell (spec §2/§3): ≥1025px static sidebar; ≤1024px it
- * collapses to an off-canvas drawer toggled by the topbar hamburger.
- * Mounts the sonner <Toaster> once for every console screen.
+ * Console shell (spec §10.3/§16.1): ≥1025px static sidebar; ≤1024px it
+ * collapses to an off-canvas drawer toggled by the topbar hamburger. The
+ * nav comes from the caller — the same chrome serves all three roles with
+ * role-specific columns. Mounts the sonner <Toaster> once for every screen.
  */
-export default function ConsoleLayout() {
+export default function ConsoleLayout({ nav }: ConsoleLayoutProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = () => setDrawerOpen(false);
 
@@ -35,7 +42,7 @@ export default function ConsoleLayout() {
           drawerOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full',
         )}
       >
-        <Sidebar onNavigate={closeDrawer} />
+        <Sidebar items={nav} onNavigate={closeDrawer} />
       </aside>
 
       <div className="flex min-h-screen flex-col lg:pl-64">

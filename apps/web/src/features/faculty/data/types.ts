@@ -1,40 +1,44 @@
 /**
- * Faculty Supervisors models (spec §5.5). No supervisor-workload endpoint
- * exists — `facultyRepo` serves fixtures behind the same async shape a live
- * repo would use, so a future endpoint drops in behind one function
- * (spec §4 Rule 1). Screens import only from `data/index`.
+ * Faculty Supervisors models (spec §5.5). `facultyRepo` reads
+ * `GET /users?role=supervisor` live first and falls back to the fixture
+ * snapshot on any error, flagged via `usedFallback` for the sample banner
+ * (spec §4 Rule 1, §10.4). Per-supervisor workload has no endpoint (§4.5),
+ * so load fields are null on live rows. Screens import only from `data/index`.
  */
 
-export type FacultyStatus = 'MAX LOAD' | 'ACTIVE' | 'ON LEAVE';
+export type FacultyStatus = 'MAX LOAD' | 'ACTIVE' | 'ON LEAVE' | 'INACTIVE';
 
 export interface SupervisorRow {
   name: string;
-  /** Mockup-style code (FAC-8821) — fixtures only, like USR codes (spec §4). */
+  /** Display code — fixtures keep mockup FAC-8821; live derives FAC-XXXX from the id. */
   code: string;
-  department: string;
-  workloadStudents: number;
-  /** Current-load capacity, used by the load alerts (e.g. 12/10). */
-  capacity: number;
-  /** Average thesis progress, 0–100. */
-  avgProgress: number;
+  email: string;
+  /** §8.7 program — replaces the display-only `department` (ADR-11: no departments). */
+  program: string;
+  /** Current load / capacity — no workload endpoint (§4.5); null on live rows. */
+  workloadStudents: number | null;
+  capacity: number | null;
+  /** Average thesis progress, 0–100 — no endpoint; null on live rows. */
+  avgProgress: number | null;
   status: FacultyStatus;
-  /** Fixture-relative label ("2 hours ago") — no activity endpoint exists. */
-  lastActivity: string;
+  /** Relative activity label — no activity endpoint; null on live rows. */
+  lastActivity: string | null;
 }
 
+/** Four live stat probes (spec §5.5) — notes are static copy, see fixtures. */
 export interface FacultyStats {
   total: number;
   totalNote: string;
+  activeSupervisors: number;
+  activeSupervisorsNote: string;
   students: number;
   studentsNote: string;
-  avgLoad: number;
-  avgLoadNote: string;
   pending: number;
   pendingNote: string;
 }
 
-export interface DeptDistributionEntry {
-  department: string;
+export interface ProgramDistributionEntry {
+  program: string;
   supervisors: number;
 }
 
@@ -53,9 +57,16 @@ export interface AdminTool {
 
 export interface FacultySnapshot {
   stats: FacultyStats;
+  /** Rows for the requested page only — paging/search happen server-side. */
   rows: SupervisorRow[];
-  distribution: DeptDistributionEntry[];
+  /** Full (or filtered) row count behind `page` — drives the pager. */
+  total: number;
+  /** Program groups — live: current page rows; fallback: fixture distribution. */
+  distribution: ProgramDistributionEntry[];
+  /** Workload alerts — live: always empty (no endpoint, §4.5). */
   alerts: LoadAlert[];
   systemNotice: string;
   adminTools: AdminTool[];
+  /** True when fixtures answered (§10.4 — screen shows SampleDataBanner). */
+  usedFallback: boolean;
 }

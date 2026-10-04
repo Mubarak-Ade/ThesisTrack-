@@ -14,3 +14,30 @@ import { expect } from 'vitest';
 import * as matchers from '@testing-library/jest-dom/matchers';
 
 expect.extend(matchers);
+
+// jsdom implements neither scrolling API. ProseMirror (TipTap) calls
+// scrollIntoView after a toolbar command's focus(); without the stub the
+// focus chain throws and the command after `focus()` never runs.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+if (!('scrollRectIntoViewIfNeeded' in Element.prototype)) {
+  (Element.prototype as unknown as Record<string, unknown>).scrollRectIntoViewIfNeeded = () => {};
+}
+
+// Layout APIs ProseMirror's coordsAtPos/scrollToSelection call on elements,
+// text nodes and ranges. jsdom has no layout engine, so the honest answer is
+// an empty client-rect list (PM treats a missing rect as "keep current
+// coordinates"), never an exception mid-command.
+const emptyRects = Object.assign([], { item: (_: number) => null }) as unknown as DOMRectList;
+const stubClientRects = (proto: object) => {
+  const target = proto as { getClientRects?: () => DOMRectList };
+  if (!target.getClientRects) target.getClientRects = () => emptyRects;
+};
+stubClientRects(Element.prototype);
+stubClientRects(Text.prototype);
+stubClientRects(Range.prototype);
+if (!Range.prototype.getBoundingClientRect) {
+  Range.prototype.getBoundingClientRect = () =>
+    new DOMRect(0, 0, 0, 0);
+}

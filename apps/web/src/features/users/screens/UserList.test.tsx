@@ -23,6 +23,7 @@ const MARCUS: ConsoleUser = {
   isActive: true,
   createdAt: '2023-09-12T09:00:00.000Z',
   registrationNumber: 'STU-2023-0457',
+  program: 'MSc Computer Science',
   department: 'Informatics',
   lastLoginLabel: '5 hours ago',
 };

@@ -21,6 +21,7 @@ const FULL_USER = {
   status: 'ACTIVE',
   createdAt: '2024-01-22T09:00:00.000Z',
   registrationNumber: 'STU-2024-0117',
+  program: 'Computer Science',
 };
 
 describe('mapUserDto', () => {
@@ -37,6 +38,7 @@ describe('mapUserDto', () => {
       isActive: true,
       createdAt: '2024-01-22T09:00:00.000Z',
       registrationNumber: 'STU-2024-0117',
+      program: 'Computer Science',
     });
   });
 
@@ -63,6 +65,15 @@ describe('mapUserDto', () => {
     expect(user.lastName).toBe('');
     expect(user.createdAt).toBeNull();
     expect(user.registrationNumber).toBeNull();
+    expect(user.program).toBeNull(); // §11.0.2: absent → unaffiliated
+  });
+
+  it('reads the §11.0.2 program field defensively (null/empty/non-string → null)', () => {
+    expect(mapUserDto({ ...FULL_USER, program: 'Data Science' }).program).toBe('Data Science');
+    expect(mapUserDto({ ...FULL_USER, program: null }).program).toBeNull();
+    expect(mapUserDto({ ...FULL_USER, program: '' }).program).toBeNull();
+    expect(mapUserDto({ ...FULL_USER, program: 42 }).program).toBeNull();
+    expect(mapUserDto(FULL_USER).program).toBe('Computer Science');
   });
 
   it('prefers an explicit status over isActive', () => {
@@ -130,13 +141,40 @@ describe('request-body builders', () => {
     ).toEqual({ firstName: 'Anita', lastName: 'Desai', email: 'a.desai@student.edu', role: 'student' });
   });
 
-  it('toImportPayload wraps rows as { users: [...] } (§A)', () => {
+  it('toCreateBody carries a trimmed §11.0.2 program when one was given', () => {
+    expect(toCreateBody({ firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student', program: '  Data Science  ' })).toEqual(
+      {
+        firstName: 'A',
+        lastName: 'B',
+        email: 'a@b.edu',
+        role: 'student',
+        program: 'Data Science',
+      },
+    );
+  });
+
+  it('toCreateBody omits the program key entirely when blank (never `program: ""`)', () => {
+    const blank = toCreateBody({ firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student', program: '   ' });
+    expect('program' in blank).toBe(false);
+    const absent = toCreateBody({ firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student' });
+    expect('program' in absent).toBe(false);
+    expect(Object.keys(toCreateBody({ firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student', program: '' }))).not.toContain(
+      'program',
+    );
+  });
+
+  it('toImportPayload wraps rows as { users: [...] } (§A) and passes program per row', () => {
     const payload = toImportPayload([
-      { firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student', department: 'X' },
+      { firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student', department: 'X', program: 'MSc CS' },
+      { firstName: 'C', lastName: 'D', email: 'c@d.edu', role: 'supervisor', program: '  ' },
     ]);
     expect(payload).toEqual({
-      users: [{ firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student' }],
+      users: [
+        { firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student', program: 'MSc CS' },
+        { firstName: 'C', lastName: 'D', email: 'c@d.edu', role: 'supervisor' },
+      ],
     });
+    expect('program' in payload.users[1]!).toBe(false);
   });
 });
 

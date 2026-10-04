@@ -1,8 +1,9 @@
 import { ArrowLeft, Building2, ChevronDown, Download, Gauge, GraduationCap, MoreHorizontal, TriangleAlert, UserPlus, Users } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import SampleDataBanner from '@/components/feedback/SampleDataBanner';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,20 +13,21 @@ import { downloadCsv } from '@/lib/csv';
 import { cn } from '@/lib/utils';
 import { getFaculty, type FacultySnapshot, type FacultyStatus, type SupervisorRow } from '../data';
 
-/** Honest paging over fixture rows (spec §5.5 — page size 5, real page 2). */
+/** Honest server-side paging (spec §5.5 — page size 5, real page 2). */
 const PAGE_SIZE = 5;
 
 const STATUS_STYLE: Record<FacultyStatus, string> = {
   'MAX LOAD': 'border-transparent bg-danger-bg text-danger',
   ACTIVE: 'border-transparent bg-success-bg text-success',
   'ON LEAVE': 'border-transparent bg-muted text-muted-foreground',
+  INACTIVE: 'border-transparent bg-muted text-muted-foreground',
 };
 
-/** Stat tiles (spec §5.5) — notes render uppercase like the mockup. */
+/** Stat tiles (spec §5.5) — four live probe totals, honest uppercase notes. */
 function FacultyStatCards({ stats }: { stats: FacultySnapshot['stats'] }) {
   const tiles = [
     {
-      label: 'Total Supertors',
+      label: 'Total Supervisors',
       value: stats.total.toLocaleString('en-US'),
       note: stats.totalNote,
       icon: Users,
@@ -33,23 +35,23 @@ function FacultyStatCards({ stats }: { stats: FacultySnapshot['stats'] }) {
       noteClass: 'uppercase tracking-wide',
     },
     {
-      label: 'Active Students',
-      value: stats.students.toLocaleString('en-US'),
-      note: stats.studentsNote,
-      icon: GraduationCap,
+      label: 'Active Supervisors',
+      value: stats.activeSupervisors.toLocaleString('en-US'),
+      note: stats.activeSupervisorsNote,
+      icon: Gauge,
       iconClass: 'bg-success-bg text-success',
       noteClass: 'uppercase tracking-wide',
     },
     {
-      label: 'Avg. Load / Faculty',
-      value: stats.avgLoad.toFixed(1),
-      note: stats.avgLoadNote,
-      icon: Gauge,
+      label: 'Students Overall',
+      value: stats.students.toLocaleString('en-US'),
+      note: stats.studentsNote,
+      icon: GraduationCap,
       iconClass: 'bg-secondary text-secondary-foreground',
-      noteClass: 'uppercase tracking-wide text-success',
+      noteClass: 'uppercase tracking-wide',
     },
     {
-      label: 'Pending Allocations',
+      label: 'Pending Reviews',
       value: String(stats.pending).padStart(2, '0'),
       note: stats.pendingNote,
       icon: TriangleAlert,
@@ -88,38 +90,41 @@ function FacultyStatCards({ stats }: { stats: FacultySnapshot['stats'] }) {
   );
 }
 
-/** Faculty Supervisors screen (spec §5.5) — fixture snapshot behind an async repo. */
+/** Faculty Supervisors screen (spec §5.5) — live repo read with sample fallback. */
 export default function SupervisorList() {
   const [snapshot, setSnapshot] = useState<FacultySnapshot | null>(null);
   const [search, setSearch] = useState('');
+  const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
 
+  // Debounced search (300ms) — keystrokes only update `search`.
+  useEffect(() => {
+    const timer = setTimeout(() => setQ(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Server-driven paging + search: the repo is the data boundary (spec §4).
   useEffect(() => {
     let alive = true;
-    void getFaculty().then((next) => {
-      if (alive) setSnapshot(next);
+    setLoading(true);
+    void getFaculty({ page, limit: PAGE_SIZE, q }).then((next) => {
+      if (alive) {
+        setSnapshot(next);
+        setLoading(false);
+      }
     });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [q, page]);
 
-  // Local search over the fixture rows (spec §5.5 — decorative filters below).
-  const rows = useMemo(() => {
-    const items = snapshot?.rows ?? [];
-    const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(
-      (row) =>
-        row.name.toLowerCase().includes(q) ||
-        row.department.toLowerCase().includes(q) ||
-        row.code.toLowerCase().includes(q),
-    );
-  }, [snapshot, search]);
-
-  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  // Rows arrive already filtered + paged for the current `q`/`page`.
+  const rows = snapshot?.rows ?? [];
+  const total = snapshot?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const current = Math.min(page, pageCount);
-  const pageRows = rows.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const pageRows = rows;
 
   const onSearch = (value: string) => {
     setSearch(value);
@@ -129,16 +134,17 @@ export default function SupervisorList() {
   const exportCsv = () => {
     downloadCsv(
       'thesistrack-faculty-supervisors.csv',
-      ['Name', 'Code', 'Department', 'Students', 'Capacity', 'Avg Progress', 'Status', 'Last Activity'],
-      rows.map((row) => [
+      ['Name', 'Code', 'Email', 'Program', 'Students', 'Capacity', 'Avg Progress', 'Status', 'Last Activity'],
+      pageRows.map((row) => [
         row.name,
         row.code,
-        row.department,
-        row.workloadStudents,
-        row.capacity,
-        `${row.avgProgress}%`,
+        row.email,
+        row.program,
+        row.workloadStudents ?? '',
+        row.capacity ?? '',
+        row.avgProgress === null ? '' : `${row.avgProgress}%`,
         row.status,
-        row.lastActivity,
+        row.lastActivity ?? '',
       ]),
     );
   };
@@ -196,16 +202,23 @@ export default function SupervisorList() {
         </div>
       </header>
 
+      {/* Sample-data banner while the repo is in fixture fallback (§10.4). */}
+      {snapshot?.usedFallback && (
+        <div className="mt-6">
+          <SampleDataBanner />
+        </div>
+      )}
+
       {stats && <div className="mt-6">
         <FacultyStatCards stats={stats} />
 
-        {/* Toolbar: local search + decorative filter buttons (spec §5.5). */}
+        {/* Toolbar: debounced server search + decorative filters (spec §5.5). */}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <div className="relative min-w-0 flex-1 sm:max-w-md">
             <Input
               value={search}
               onChange={(event) => onSearch(event.target.value)}
-              placeholder="Search by name, email, or department…"
+              placeholder="Search by name, email, or program…"
               aria-label="Search faculty supervisors"
               className="pr-9"
             />
@@ -250,8 +263,8 @@ export default function SupervisorList() {
               <thead>
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                   <th scope="col" className="px-5 py-3 font-semibold">Supervisor Details</th>
-                  <th scope="col" className="px-3 py-3 font-semibold">Department</th>
-                  <th scope="col" className="px-3 py-3 font-semibold">Workload</th>
+                  <th scope="col" className="px-3 py-3 font-semibold">Program</th>
+                  <th scope="col" className="px-3 py-3 font-semibold">Load</th>
                   <th scope="col" className="px-3 py-3 font-semibold">Avg. Progress</th>
                   <th scope="col" className="px-3 py-3 font-semibold">Status</th>
                   <th scope="col" className="px-3 py-3 font-semibold">Last Activity</th>
@@ -284,7 +297,8 @@ export default function SupervisorList() {
               page={current}
               pageCount={pageCount}
               variant="prevNext"
-              footer={`Showing ${pageRows.length} of ${rows.length} faculty supervisors`}
+              loading={loading}
+              footer={`Showing ${pageRows.length} of ${total} faculty supervisors`}
               onPageChange={setPage}
             />
           </div>
@@ -295,13 +309,18 @@ export default function SupervisorList() {
           <Card>
             <CardContent className="p-5">
               <h2 className="font-display text-lg font-bold text-foreground">
-                Departmental Distribution
+                Program Distribution
               </h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {snapshot?.usedFallback
+                  ? 'Sample groups (fixture snapshot).'
+                  : 'Current page only — grouped by program.'}
+              </p>
               <ul className="mt-4 space-y-3.5">
                 {distribution.map((entry) => (
-                  <li key={entry.department}>
+                  <li key={entry.program}>
                     <div className="flex items-baseline justify-between gap-3 text-sm">
-                      <span className="font-medium text-foreground">{entry.department}</span>
+                      <span className="font-medium text-foreground">{entry.program}</span>
                       <span className="font-semibold text-foreground">{entry.supervisors}</span>
                     </div>
                     <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -319,30 +338,36 @@ export default function SupervisorList() {
           <Card>
             <CardContent className="p-5">
               <h2 className="font-display text-lg font-bold text-foreground">Load Capacity Alerts</h2>
-              <ul className="mt-4 space-y-3">
-                {alerts.map((alert) => (
-                  <li
-                    key={alert.name}
-                    className={cn(
-                      'rounded-lg border p-3.5',
-                      alert.severity === 'danger'
-                        ? 'border-danger/30 bg-danger-bg'
-                        : 'border-amber-300 bg-amber-50',
-                    )}
-                  >
-                    <p
+              {alerts.length === 0 ? (
+                <p className="mt-4 text-sm text-muted-foreground">
+                  No load alerts — workload data has no endpoint (§4.5).
+                </p>
+              ) : (
+                <ul className="mt-4 space-y-3">
+                  {alerts.map((alert) => (
+                    <li
+                      key={alert.name}
                       className={cn(
-                        'flex items-center gap-2 text-sm font-bold',
-                        alert.severity === 'danger' ? 'text-danger' : 'text-amber-700',
+                        'rounded-lg border p-3.5',
+                        alert.severity === 'danger'
+                          ? 'border-danger/30 bg-danger-bg'
+                          : 'border-amber-300 bg-amber-50',
                       )}
                     >
-                      <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
-                      {alert.name}
-                    </p>
-                    <p className="mt-1 text-xs leading-relaxed text-foreground/80">{alert.body}</p>
-                  </li>
-                ))}
-              </ul>
+                      <p
+                        className={cn(
+                          'flex items-center gap-2 text-sm font-bold',
+                          alert.severity === 'danger' ? 'text-danger' : 'text-amber-700',
+                        )}
+                      >
+                        <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
+                        {alert.name}
+                      </p>
+                      <p className="mt-1 text-xs leading-relaxed text-foreground/80">{alert.body}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
 
@@ -401,7 +426,7 @@ export default function SupervisorList() {
   );
 }
 
-/** One workload row — silhouette + code, dept, load, progress bar, status pill. */
+/** One directory row — silhouette + code + email, program, load, progress, status. */
 function FacultyRow({ row, onAction }: { row: SupervisorRow; onAction: () => void }) {
   return (
     <tr className="border-b border-border last:border-0 hover:bg-accent/40">
@@ -411,33 +436,46 @@ function FacultyRow({ row, onAction }: { row: SupervisorRow; onAction: () => voi
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-foreground">{row.name}</p>
             <p className="truncate font-mono text-xs text-primary">{row.code}</p>
+            <p className="truncate text-xs text-muted-foreground">{row.email}</p>
           </div>
         </div>
       </td>
       <td className="px-3 py-3.5">
         <span className="flex items-center gap-1.5 text-sm text-foreground">
           <Building2 className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span className="truncate">{row.department}</span>
+          <span className="truncate">{row.program}</span>
         </span>
       </td>
       <td className="px-3 py-3.5">
-        <p className="text-sm font-semibold text-foreground">{row.workloadStudents} Students</p>
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Current Load
-        </p>
+        {row.workloadStudents === null || row.capacity === null ? (
+          <p className="text-sm text-muted-foreground">—</p>
+        ) : (
+          <>
+            <p className="text-sm font-semibold text-foreground">
+              {row.workloadStudents} / {row.capacity} Students
+            </p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Current Load
+            </p>
+          </>
+        )}
       </td>
       <td className="px-3 py-3.5">
-        <div className="flex items-center gap-2">
-          <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-            <span
-              className="block h-full rounded-full bg-primary"
-              style={{ width: `${row.avgProgress}%` }}
-            />
-          </span>
-          <span className="text-xs font-semibold tabular-nums text-foreground">
-            {row.avgProgress}%
-          </span>
-        </div>
+        {row.avgProgress === null ? (
+          <p className="text-sm text-muted-foreground">—</p>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+              <span
+                className="block h-full rounded-full bg-primary"
+                style={{ width: `${row.avgProgress}%` }}
+              />
+            </span>
+            <span className="text-xs font-semibold tabular-nums text-foreground">
+              {row.avgProgress}%
+            </span>
+          </div>
+        )}
       </td>
       <td className="px-3 py-3.5">
         <span
@@ -449,7 +487,7 @@ function FacultyRow({ row, onAction }: { row: SupervisorRow; onAction: () => voi
           {row.status}
         </span>
       </td>
-      <td className="px-3 py-3.5 text-sm text-muted-foreground">{row.lastActivity}</td>
+      <td className="px-3 py-3.5 text-sm text-muted-foreground">{row.lastActivity ?? '—'}</td>
       <td className="px-3 py-3.5 text-right">
         <Button
           type="button"

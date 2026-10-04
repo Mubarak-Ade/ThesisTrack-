@@ -32,6 +32,9 @@
   --danger-bg: #fdf2f4;
   --success: #15803d;
   --success-bg: #f2f9f4;
+  /* "Revision required" needs its own signal — distinct from danger red. */
+  --warning: #a16207;
+  --warning-bg: #fdf8ec;
 }
 
 /* ── Tailwind v4 theme (CSS-first config) ─────────────────────────────── */
@@ -73,6 +76,8 @@
   --color-danger-bg: var(--danger-bg);
   --color-success: var(--success);
   --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
 
   /* Fonts — serif display for mockup headlines, Inter for UI */
   --font-sans:

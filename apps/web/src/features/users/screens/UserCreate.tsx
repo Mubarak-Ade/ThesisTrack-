@@ -13,10 +13,10 @@ import { Label } from '@/components/ui/label';
 import { ApiError } from '@/lib/api/http';
 import AccountPreview from '../components/AccountPreview';
 import { DEPARTMENTS, ROLES } from '../data/constants';
-import type { Role } from '../data/types';
+import type { CreateUserInput, Role } from '../data/types';
 import { createUser } from '../data/usersRepo';
 
-/** Mirrors the pinned create contract (§A): name/email/role only server-side. */
+/** Mirrors the pinned create contract (§A): name/email/role, + optional §11.0.2 program. */
 const createSchema = z.object({
   firstName: z
     .string()
@@ -36,6 +36,8 @@ const createSchema = z.object({
     .max(255, 'Email must be 255 characters or fewer'),
   role: z.string().refine((value) => (ROLES as readonly string[]).includes(value), 'Select a role'),
   department: z.string(),
+  // §11.0.2 delta — optional; blank = unaffiliated (ADR-16 default workflow).
+  program: z.string().trim().max(255, 'Program must be 255 characters or fewer'),
   sendInvite: z.boolean(),
   enforcePasswordChange: z.boolean(),
 });
@@ -88,6 +90,7 @@ export default function UserCreate() {
       email: '',
       role: '',
       department: '',
+      program: '',
       // Both onboarding cards default-checked (spec §5.3).
       sendInvite: true,
       enforcePasswordChange: true,
@@ -96,14 +99,17 @@ export default function UserCreate() {
 
   const onSubmit = form.handleSubmit(async (values) => {
     try {
-      const created = await createUser({
+      const input: CreateUserInput = {
         firstName: values.firstName,
         lastName: values.lastName,
         email: values.email,
         role: values.role as Role,
         // UI-only — dropped again by the repo's toCreateBody (§A).
         department: values.department || undefined,
-      });
+      };
+      // §11.0.2: blank program stays off the wire (unaffiliated → default workflow).
+      if (values.program) input.program = values.program;
+      const created = await createUser(input);
       // §A: create auto-provisions the invitation — the toggle only shapes
       // which confirmation the operator sees.
       if (values.sendInvite) {
@@ -293,6 +299,24 @@ export default function UserCreate() {
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="uc-program" className={LABEL_CLASS}>
+                      Program
+                    </Label>
+                    <Input
+                      id="uc-program"
+                      placeholder="e.g. MSc Computer Science"
+                      maxLength={255}
+                      aria-invalid={!!errors.program}
+                      {...form.register('program')}
+                    />
+                    <p className="text-xs italic text-muted-foreground">
+                      Optional — departmental program used to pick the student&apos;s workflow
+                      (ADR-16). Leave blank for unaffiliated: the default workflow applies.
+                    </p>
+                    {fieldError('program')}
                   </div>
                 </div>
               </CardContent>

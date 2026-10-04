@@ -31,6 +31,7 @@ import type {
   ImportRow,
   ListUsersArgs,
   SecurityLog,
+  UpdateUserInput,
   UserDetail,
   UsersPage,
 } from './types';
@@ -136,6 +137,15 @@ export async function sendInvite(id: string): Promise<{ status: string }> {
 export async function importUsers(rows: ImportRow[]): Promise<ImportResult> {
   const payload = await api.post<unknown>('/users/import', toImportPayload(rows));
   return mapImportResult(payload);
+}
+
+/**
+ * Partial profile patch (§11.0.2 — `{ program }`, `null` clears it). Returns
+ * the row the server actually stored. Write: errors propagate (Rule 3).
+ */
+export async function updateUser(id: string, patch: UpdateUserInput): Promise<ConsoleUser> {
+  const payload = await api.patch<unknown>(`/users/${id}`, patch);
+  return mapUserDetail(payload);
 }
 
 /** Security-log rail — no endpoint, always fixtures (async for uniform shape). */
