@@ -6,7 +6,6 @@ export {
   getStats,
   getUser,
   importUsers,
-  listSecurityLogs,
   listUsers,
   sendInvite,
   updateUser,

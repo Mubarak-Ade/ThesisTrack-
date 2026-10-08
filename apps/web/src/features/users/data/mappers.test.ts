@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  mapActivityEntries,
   mapCreatedUser,
   mapImportResult,
+  mapMilestoneCount,
+  mapProjectRefs,
+  mapSupervisorName,
   mapUserDetail,
   mapUserDto,
   mapUsersPage,
+  toActivityItem,
   toCreateBody,
   toImportPayload,
-  withExtras,
+  withRails,
 } from './mappers';
 
 const FULL_USER = {
@@ -178,15 +183,69 @@ describe('request-body builders', () => {
   });
 });
 
-describe('withExtras', () => {
-  it('defaults extras and rails, and merges overrides', () => {
-    const bare = withExtras(mapUserDto(FULL_USER), null);
-    expect(bare.extras).toEqual({ department: null, phone: null, address: null, portalLanguage: null });
-    expect(bare.theses).toEqual([]);
-    expect(bare.oversight).toEqual({ lastLogin: '—', createdBy: '—', permissions: '—' });
+describe('withRails', () => {
+  it('carries the live rails, keeps extras empty, and never drops the flag', () => {
+    const detail = withRails(mapUserDto(FULL_USER), {
+      theses: [],
+      milestones: 4,
+      activity: [],
+      oversight: { lastLogin: '—', createdBy: '—', permissions: 'Student' },
+      railsError: false,
+    });
+    expect(detail.extras).toEqual({ department: null, phone: null, address: null, portalLanguage: null });
+    expect(detail.milestones).toBe(4);
+    expect(detail.railsError).toBe(false);
+    expect(detail.theses).toEqual([]);
+    expect(detail.oversight.permissions).toBe('Student');
+  });
+});
 
-    const merged = withExtras(mapUserDto(FULL_USER), { phone: '+1 (555) 000-0000' });
-    expect(merged.extras.phone).toBe('+1 (555) 000-0000');
-    expect(merged.extras.department).toBeNull();
+describe('profile rail mappers (§16.3)', () => {
+  it('mapProjectRefs reads rows and throws on structure drift', () => {
+    const refs = mapProjectRefs({
+      projects: [{ id: 'p1', title: 'Thesis', status: 'active', updatedAt: '2026-10-01T00:00:00.000Z' }],
+    });
+    expect(refs[0]).toEqual({ id: 'p1', title: 'Thesis', status: 'active', updatedAt: '2026-10-01T00:00:00.000Z' });
+    // Field-level drift defaults; structure-level drift throws.
+    expect(mapProjectRefs({ projects: [{ id: 'p2' }] })[0]).toMatchObject({ status: 'unknown', title: '' });
+    expect(() => mapProjectRefs({ data: [] })).toThrow(/projects.*missing/i);
+  });
+
+  it('mapSupervisorName derives "First Last" / "Unassigned" / drift', () => {
+    expect(mapSupervisorName({ active: { supervisor: { firstName: 'Elena', lastName: 'Rossi' } } })).toBe('Elena Rossi');
+    expect(mapSupervisorName({ active: null })).toBe('Unassigned'); // no assignment is not drift
+    expect(mapSupervisorName({ active: { supervisor: null } })).toBe('Unassigned');
+    expect(() => mapSupervisorName({ data: {} })).toThrow(/active.*missing/i);
+  });
+
+  it('mapMilestoneCount counts rows and throws on drift', () => {
+    expect(mapMilestoneCount({ milestones: [{ id: 'm1' }, { id: 'm2' }] })).toBe(2);
+    expect(mapMilestoneCount({ milestones: [] })).toBe(0);
+    expect(() => mapMilestoneCount({ data: [] })).toThrow(/milestones.*missing/i);
+  });
+
+  it('mapActivityEntries reads kind/summary/at and parses the sort key', () => {
+    const entries = mapActivityEntries({
+      activity: [{ kind: 'submission.created', summary: 'Draft uploaded', at: '2026-10-01T10:00:00.000Z' }],
+    });
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ kind: 'submission.created', summary: 'Draft uploaded' });
+    expect(entries[0]!.atMs).toBeGreaterThan(0);
+    expect(() => mapActivityEntries({ data: [] })).toThrow(/activity.*missing/i);
+  });
+
+  it('toActivityItem maps kinds to icons and formats the relative time', () => {
+    const at = '2026-10-01T10:00:00.000Z';
+    const now = new Date('2026-10-06T10:00:00.000Z').getTime();
+    const base = { at, atMs: new Date(at).getTime() };
+    expect(toActivityItem({ ...base, kind: 'submission.created', summary: 'Draft uploaded' }, now)).toEqual({
+      iconKind: 'upload',
+      strong: 'Draft uploaded',
+      when: '5 days ago',
+    });
+    expect(toActivityItem({ ...base, kind: 'proposal.reviewed', summary: 'Proposal approved' }, now).iconKind).toBe('approve');
+    expect(toActivityItem({ ...base, kind: 'stage.started', summary: 'Stage started' }, now).iconKind).toBe('system');
+    // Unparseable `at` → honest em-dash, never a bogus date.
+    expect(toActivityItem({ kind: 'x', summary: 'y', at: '', atMs: 0 }, now).when).toBe('—');
   });
 });

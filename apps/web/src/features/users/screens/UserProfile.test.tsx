@@ -34,10 +34,11 @@ const DETAIL: UserDetail = {
   department: 'Informatics',
   lastLoginLabel: '5 hours ago',
   extras: {
-    department: 'Informatics',
-    phone: '+1 (555) 012-3456',
-    address: '742 Evergreen Terrace, Springfield',
-    portalLanguage: 'English (UK)',
+    // No contact endpoint exists — the repo always returns nulls (honest `—`).
+    department: null,
+    phone: null,
+    address: null,
+    portalLanguage: null,
   },
   theses: [
     {
@@ -48,13 +49,12 @@ const DETAIL: UserDetail = {
       updated: '2 hours ago',
     },
   ],
-  audit: [
-    { action: 'Account Login', ip: '192.168.1.45', at: 'Oct 24, 2024, 10:22 AM', outcome: 'SUCCESS' },
-  ],
+  milestones: 14,
   activity: [
     { iconKind: 'system', before: 'System allocated supervisor ', strong: 'Dr. Elena Rossi', when: '2 DAYS AGO' },
   ],
-  oversight: { lastLogin: 'Oct 24, 2024 (10:22 AM)', createdBy: 'Admin Portal', permissions: 'Standard User' },
+  oversight: { lastLogin: '—', createdBy: '—', permissions: 'Student' },
+  railsError: false,
 };
 
 const renderProfile = (id = DETAIL.id) =>
@@ -71,30 +71,43 @@ beforeEach(() => {
 });
 
 describe('UserProfile (plan 6)', () => {
-  it('renders live detail merged with fixture rails', async () => {
+  it('renders live detail with live rails and honest gaps', async () => {
     vi.mocked(getUser).mockResolvedValue(DETAIL);
 
     renderProfile();
 
     expect(await screen.findByRole('heading', { name: 'User Profile' })).toBeInTheDocument();
     expect(await screen.findByText('Marcus Holloway')).toBeInTheDocument();
-    // Derived code in the header (spec §5.4 — mockup shows ID: USR-XXXX).
+    // Derived code in the header (mockup parity §5.4 — mockup shows ID: USR-XXXX).
     expect(screen.getByText(`ID: ${DETAIL.code}`)).toBeInTheDocument();
-    // Header card counters (fixture milestones).
+    // Header card counters (live theses count + summed milestones).
     expect(screen.getByText('Theses')).toBeInTheDocument();
     expect(screen.getByText('Milestones')).toBeInTheDocument();
     expect(screen.getByText('14')).toBeInTheDocument();
-    // Contact extras merged from fixtures + live Member Since.
-    expect(screen.getByText('+1 (555) 012-3456')).toBeInTheDocument();
-    expect(screen.getByText('742 Evergreen Terrace, Springfield')).toBeInTheDocument();
+    // Role line carries the §11.0.2 program (ADR-16 match key).
+    expect(screen.getByText(/Student • MSc Computer Science/)).toBeInTheDocument();
+    // Contact card: live Member Since; no endpoint → em-dash phone/address rows.
     expect(screen.getByText('Member Since')).toBeInTheDocument();
     expect(screen.getByText('Send Direct Message')).toBeInTheDocument();
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
     // Rails rendered with their new actions.
     expect(screen.getByText('Neural Network Optimization for Edge Devices')).toBeInTheDocument();
     expect(screen.getByText('Add Project ›')).toBeInTheDocument();
-    expect(screen.getByText('Account Login')).toBeInTheDocument();
-    expect(screen.getByText('View Full Audit History ↗')).toBeInTheDocument();
+    // Audit rail is an honest gap (spec §19.2 rejects AuditEvent) — no fixture table.
+    expect(screen.getByText(/no audit feed exists/i)).toBeInTheDocument();
+    expect(screen.queryByText('Account Login')).not.toBeInTheDocument();
+    expect(screen.queryByText(/view full audit history/i)).not.toBeInTheDocument();
     expect(getUser).toHaveBeenCalledWith(DETAIL.id);
+  });
+
+  it('shows honest error copy when the live rail fan-out failed', async () => {
+    vi.mocked(getUser).mockResolvedValue({ ...DETAIL, theses: [], activity: [], milestones: 0, railsError: true });
+
+    renderProfile();
+
+    expect(await screen.findByText(/project assignments could not be loaded/i)).toBeInTheDocument();
+    expect(screen.getByText(/activity could not be loaded/i)).toBeInTheDocument();
+    expect(screen.queryByText('Neural Network Optimization for Edge Devices')).not.toBeInTheDocument();
   });
 
   it('shows the not-found state with a back link for unknown ids', async () => {

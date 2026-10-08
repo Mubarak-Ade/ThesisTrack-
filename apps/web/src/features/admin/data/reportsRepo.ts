@@ -63,12 +63,18 @@ const trimNote = (rows: number, total: number): string | undefined =>
     : undefined;
 
 export async function getReportCounts(): Promise<ReportCounts> {
+  // Every `proposal_status` member is probed, so the caption always sums to
+  // `proposalsTotal` (the Projects card enumerates its full status set the same
+  // way — a partial breakdown next to a total reads as a miscount).
   const [
     projects,
     students,
     faculty,
     proposalsTotal,
+    proposalsDraft,
     proposalsSubmitted,
+    proposalsUnderReview,
+    proposalsRevisionRequired,
     proposalsApproved,
     proposalsRejected,
   ] = await Promise.all([
@@ -76,7 +82,10 @@ export async function getReportCounts(): Promise<ReportCounts> {
     count('/users?role=student'),
     count('/users?role=supervisor'),
     count('/proposals'),
+    count('/proposals?status=draft'),
     count('/proposals?status=submitted'),
+    count('/proposals?status=under_review'),
+    count('/proposals?status=revision_required'),
     count('/proposals?status=approved'),
     count('/proposals?status=rejected'),
   ]);
@@ -88,7 +97,10 @@ export async function getReportCounts(): Promise<ReportCounts> {
     projectsCompleted: projects.completed,
     projectsArchived: projects.archived,
     proposalsTotal,
+    proposalsDraft,
     proposalsSubmitted,
+    proposalsUnderReview,
+    proposalsRevisionRequired,
     proposalsApproved,
     proposalsRejected,
   };

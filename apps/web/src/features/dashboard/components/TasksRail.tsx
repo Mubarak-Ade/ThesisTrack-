@@ -42,7 +42,7 @@ function CriticalCard({ task }: { task: CriticalTask }) {
   return (
     <div className="rounded-xl bg-danger p-4 text-white">
       <p className="text-sm font-bold">Critical Deadline</p>
-      <p className="mt-1.5 text-sm leading-relaxed text-white/90">
+      <p className="mt-1.5 text-sm leading-relaxed text-white/95">
         {task.bodyLead}
         <strong className="font-bold text-white">{task.dateEm}</strong>
         {task.bodyTail}
@@ -51,7 +51,7 @@ function CriticalCard({ task }: { task: CriticalTask }) {
         type="button"
         size="sm"
         onClick={() => navigate(task.to ?? '/faculty')}
-        className="mt-3 bg-white text-danger hover:bg-white/90 hover:text-danger"
+        className="mt-3 bg-white text-danger hover:bg-white/95 hover:text-danger"
       >
         {task.cta}
       </Button>
@@ -70,7 +70,9 @@ export default function TasksRail({ tasks }: { tasks: TaskGroups }) {
     {
       label: 'Action Required',
       items: tasks.action,
-      labelClass: 'text-amber-600',
+      // text-warning (#a16207), not amber-600: the raw amber measured 3.09:1
+      // on the card and failed WCAG AA at 12px bold (Phase 14 a11y sweep).
+      labelClass: 'text-warning',
       icon: Zap,
     },
   ];

@@ -258,7 +258,10 @@ export function mapReportCounts(value: unknown): ReportCounts {
     projectsCompleted: num(r.projectsCompleted),
     projectsArchived: num(r.projectsArchived),
     proposalsTotal: num(r.proposalsTotal),
+    proposalsDraft: num(r.proposalsDraft),
     proposalsSubmitted: num(r.proposalsSubmitted),
+    proposalsUnderReview: num(r.proposalsUnderReview),
+    proposalsRevisionRequired: num(r.proposalsRevisionRequired),
     proposalsApproved: num(r.proposalsApproved),
     proposalsRejected: num(r.proposalsRejected),
   };

@@ -119,6 +119,21 @@ describe('resolveStudentState — precedence across mixed histories', () => {
     expect(result.state).toBe(5);
   });
 
+  it('a later stray draft does not hide an approval — State 5 wins (§16.2 row)', () => {
+    const result = resolveStudentState(
+      input({
+        proposals: [
+          proposal('approved', { updatedAt: '2026-10-01T00:00:00.000Z' }),
+          proposal('draft', { updatedAt: '2026-10-03T00:00:00.000Z' }),
+        ],
+        projects: [{ id: 'pr-1', title: 'Ledger', status: 'active' }],
+      }),
+    );
+    expect(result.state).toBe(5);
+    expect(result.hasDraft).toBe(false);
+    expect(result.proposal?.status).toBe('approved');
+  });
+
   it('State 0 wins over everything — unassigned students are always State 0', () => {
     const result = resolveStudentState(
       input({ hasActiveSupervisor: false, supervisor: null, proposals: [proposal('draft')] }),

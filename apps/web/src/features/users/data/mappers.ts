@@ -3,13 +3,17 @@
  * unknown fields ignored, missing fields defaulted. Field-level drift is
  * absorbed here; structure-level drift throws so the repo can fall back.
  */
+import { formatRelative } from '@/lib/utils/time';
 import { ROLES } from './constants';
 import type {
+  ActivityItem,
   ContactExtras,
   ConsoleUser,
   CreateUserInput,
   ImportRow,
+  Oversight,
   Role,
+  ThesisCard,
   UserDetail,
   UserStatus,
 } from './types';
@@ -146,18 +150,118 @@ export function toImportPayload(rows: ImportRow[]): { users: CreateBody[] } {
   return { users: rows.map(toCreateBody) };
 }
 
-/** Merge live core with fixture extras into the profile model. */
-export function withExtras(
-  user: ConsoleUser,
-  extras?: Partial<ContactExtras> | null,
-  rails?: { theses: UserDetail['theses']; audit: UserDetail['audit']; activity: UserDetail['activity']; oversight: UserDetail['oversight'] },
-): UserDetail {
+/* ------------------------------------------- live profile rails (§16.3) */
+
+/** One row of `GET /projects` as the thesis rail needs it. */
+export interface ProjectRef {
+  id: string;
+  title: string;
+  /** Enum from the API; drifts to 'unknown' rather than inventing a state. */
+  status: string;
+  updatedAt: string;
+}
+
+/** `GET /projects` envelope → the profile's rows. Structure drift throws. */
+export function mapProjectRefs(value: unknown): ProjectRef[] {
+  const r = asRecord(value);
+  if (!Array.isArray(r.projects)) {
+    throw new Error('GET /projects: `projects` array missing — response shape changed');
+  }
+  return r.projects.map((raw) => {
+    const p = asRecord(raw);
+    return {
+      id: str(p.id),
+      title: str(p.title),
+      status: str(p.status, 'unknown'),
+      updatedAt: str(p.updatedAt),
+    };
+  });
+}
+
+/**
+ * `GET /projects/:id/supervisor` → "First Last" / "Unassigned". Tolerant of a
+ * missing supervisor (no assignment), strict about a missing `active` key
+ * (structure drift), matching the Students-page parser (Phase 14 F1).
+ */
+export function mapSupervisorName(value: unknown): string {
+  const payload = asRecord(value);
+  if (!('active' in payload)) {
+    throw new Error('GET /projects/:id/supervisor: `active` missing — response shape changed');
+  }
+  const active = asRecord(payload.active); // `active: null` → {} → no supervisor
+  const person = asRecord(active.supervisor);
+  return `${str(person.firstName)} ${str(person.lastName)}`.trim() || 'Unassigned';
+}
+
+/** `GET /projects/:id/milestones` → row count (drift throws). */
+export function mapMilestoneCount(value: unknown): number {
+  const r = asRecord(value);
+  if (!Array.isArray(r.milestones)) {
+    throw new Error('GET /projects/:id/milestones: `milestones` array missing — response shape changed');
+  }
+  return r.milestones.length;
+}
+
+/** One raw row of `GET /projects/:id/activity` (§11.13 derived feed). */
+export interface ActivityEntry {
+  kind: string;
+  summary: string;
+  /** Raw ISO timestamp — kept for the newest-first merge. */
+  at: string;
+  /** Parsed epoch ms for sorting; 0 when unparseable. */
+  atMs: number;
+}
+
+/** `GET /projects/:id/activity` envelope → sorted-capable entries (drift throws). */
+export function mapActivityEntries(value: unknown): ActivityEntry[] {
+  const r = asRecord(value);
+  if (!Array.isArray(r.activity)) {
+    throw new Error('GET /projects/:id/activity: `activity` array missing — response shape changed');
+  }
+  return r.activity.map((raw) => {
+    const row = asRecord(raw);
+    const at = str(row.at);
+    const ms = new Date(at).getTime();
+    return {
+      kind: str(row.kind),
+      summary: str(row.summary),
+      at,
+      atMs: Number.isFinite(ms) ? ms : 0,
+    };
+  });
+}
+
+/** The nine §11.13 kinds → the rail's three icon buckets. */
+function activityIcon(kind: string): ActivityItem['iconKind'] {
+  if (kind === 'proposal.submitted' || kind === 'submission.created') return 'upload';
+  if (kind.endsWith('.reviewed') || kind.endsWith('.completed') || kind === 'feedback.created') {
+    return 'approve';
+  }
+  return 'system';
+}
+
+/** Entry → display item. `now` injectable so the relative time is testable. */
+export function toActivityItem(entry: ActivityEntry, now?: number): ActivityItem {
   return {
-    ...user,
-    extras: { ...EMPTY_EXTRAS, ...extras },
-    theses: rails?.theses ?? [],
-    audit: rails?.audit ?? [],
-    activity: rails?.activity ?? [],
-    oversight: rails?.oversight ?? { lastLogin: '—', createdBy: '—', permissions: '—' },
+    iconKind: activityIcon(entry.kind),
+    strong: entry.summary,
+    when: entry.atMs > 0 ? formatRelative(entry.atMs, now) : '—',
   };
+}
+
+/**
+ * Live core + live rails into the profile model (§16.3 User details).
+ * `extras` stays empty — no contact endpoint exists (parity §5.4 `—` rows).
+ */
+export function withRails(
+  user: ConsoleUser,
+  rails: {
+    theses: ThesisCard[];
+    milestones: number;
+    activity: ActivityItem[];
+    oversight: Oversight;
+    railsError: boolean;
+  },
+): UserDetail {
+  return { ...user, extras: { ...EMPTY_EXTRAS }, ...rails };
 }

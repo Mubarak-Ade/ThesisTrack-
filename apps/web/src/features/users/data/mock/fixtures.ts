@@ -3,15 +3,7 @@
  * read-fallback snapshots. Fixtures flow through the same types/mappers as
  * live data; ids are fixed UUIDs so profile links behave like live rows.
  */
-import type {
-  ActivityItem,
-  AuditRow,
-  ContactExtras,
-  ConsoleUser,
-  Oversight,
-  SecurityLog,
-  ThesisCard,
-} from '../types';
+import type { ConsoleUser } from '../types';
 
 export const MOCK_USERS: ConsoleUser[] = [
   {
@@ -196,99 +188,11 @@ export const MOCK_USERS: ConsoleUser[] = [
   },
 ];
 
+/** Sample counters — shown only when every `limit=1` probe fails (§16.3). */
 export const MOCK_STATS = {
   total: 1248,
   students: 842,
   faculty: 156,
-  alerts: 4,
-  totalDelta: '+12 this month',
-  engagement: '92% engagement',
-  facultyNote: '12 departments',
-  alertsNote: 'Pending verification',
+  inactive: 4,
 };
 
-export const MOCK_SECURITY_LOGS: SecurityLog[] = [
-  {
-    id: 'sl-1',
-    action: 'Password Reset',
-    target: 'Marcus Holloway',
-    actor: 'System',
-    when: '12 MINS AGO',
-    severity: 'ok',
-  },
-  {
-    id: 'sl-2',
-    action: 'Role Upgrade',
-    target: 'Dr. Elena Rossi',
-    actor: 'Prof. Vance',
-    when: '45 MINS AGO',
-    severity: 'ok',
-  },
-  {
-    id: 'sl-3',
-    action: 'Suspicious Login',
-    target: 'Anita Desai',
-    actor: 'Automatic Flag',
-    when: '2 HOURS AGO',
-    severity: 'danger',
-  },
-  {
-    id: 'sl-4',
-    action: 'Department Shift',
-    target: 'Robert Chen',
-    actor: 'Prof. Vance',
-    when: 'YESTERDAY',
-    severity: 'ok',
-  },
-];
-
-export const MOCK_CONTACT_EXTRAS: Record<string, Partial<ContactExtras>> = {
-  '00000000-0000-4000-8000-000000000001': {
-    department: 'Informatics',
-    phone: '+1 (555) 012-9911',
-    address: '42 Turing Lane, Springfield',
-    portalLanguage: 'English (UK)',
-  },
-  '00000000-0000-4000-8000-000000000002': {
-    department: 'Informatics',
-    phone: '+1 (555) 012-3456',
-    address: '742 Evergreen Terrace, Springfield',
-    portalLanguage: 'English (UK)',
-  },
-};
-
-/** Profile rails — no endpoints exist, identical for every profile (spec §5.4). */
-export const PROFILE_RAILS = {
-  theses: [
-    {
-      code: 'TH-2024-001',
-      badge: 'IN PROGRESS',
-      title: 'Neural Network Optimization for Edge Devices',
-      supervisor: 'Dr. Elena Rossi',
-      updated: '2 hours ago',
-    },
-    {
-      code: 'TH-2023-089',
-      badge: 'COMPLETED',
-      title: 'Comparative Study of BERT vs RoBERTa in Legal Tech',
-      supervisor: 'Prof. Thomas Miller',
-      updated: '3 months ago',
-    },
-  ] satisfies ThesisCard[],
-  audit: [
-    { action: 'Account Login', ip: '192.168.1.45', at: 'Oct 24, 2024, 10:22 AM', outcome: 'SUCCESS' },
-    { action: 'Profile Updated', ip: '192.168.1.45', at: 'Oct 22, 2024, 02:15 PM', outcome: 'SUCCESS' },
-    { action: 'Thesis Draft Uploaded', ip: '192.168.1.45', at: 'Oct 20, 2024, 11:05 AM', outcome: 'SUCCESS' },
-    { action: 'Password Reset Requested', ip: '172.16.0.12', at: 'Sept 15, 2024, 09:30 AM', outcome: 'WARNING' },
-  ] satisfies AuditRow[],
-  activity: [
-    { iconKind: 'system', before: 'System allocated supervisor ', strong: 'Dr. Elena Rossi', when: '2 DAYS AGO' },
-    { iconKind: 'upload', before: 'Marcus Holloway uploaded ', strong: 'Draft_Chapter_2.pdf', when: '3 DAYS AGO' },
-    { iconKind: 'approve', before: 'Dr. Elena Rossi approved ', strong: 'Research Proposal', when: '1 WEEK AGO' },
-  ] satisfies ActivityItem[],
-  oversight: {
-    lastLogin: 'Oct 24, 2024 (10:22 AM)',
-    createdBy: 'Admin Portal',
-    permissions: 'Standard User',
-  } satisfies Oversight,
-};

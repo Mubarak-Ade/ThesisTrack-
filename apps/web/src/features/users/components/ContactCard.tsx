@@ -19,14 +19,18 @@ function formatDate(iso: string | null): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-/** Contact Information — live core fields over fixture extras (spec §5.4). */
+/**
+ * Contact Information — live core fields (email, member-since); phone /
+ * address / language have no endpoint and always render honest em-dashes
+ * (mockup parity §5.4 `—` fallbacks).
+ */
 export default function ContactCard({ detail }: { detail: UserDetail }) {
   const rows: Row[] = [
     { label: 'Email', value: detail.email, icon: Mail },
     { label: 'Phone', value: detail.extras.phone ?? '—', icon: Phone },
     { label: 'Office/Address', value: detail.extras.address ?? '—', icon: MapPin },
     { label: 'Portal Language', value: detail.extras.portalLanguage ?? '—', icon: Languages },
-    // Live field — always from the API (spec §5.4).
+    // Live field — always from the API (mockup parity §5.4).
     { label: 'Member Since', value: formatDate(detail.createdAt), icon: CalendarDays },
   ];
 

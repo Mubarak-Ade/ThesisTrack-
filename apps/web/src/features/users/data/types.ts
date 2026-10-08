@@ -55,13 +55,6 @@ export interface ThesisCard {
   updated: string;
 }
 
-export interface AuditRow {
-  action: string;
-  ip: string;
-  at: string;
-  outcome: 'SUCCESS' | 'WARNING';
-}
-
 export interface ActivityItem {
   iconKind: 'system' | 'upload' | 'approve';
   before?: string;
@@ -76,22 +69,22 @@ export interface Oversight {
   permissions: string;
 }
 
-/** Profile payload: live core + rails/extras that have no endpoint (spec §5.4). */
+/**
+ * Profile payload — live core + live project rails (engineering spec §16.3
+ * "User details ✅"): `theses`/`milestones`/`activity` come from the bounded
+ * `GET /projects?studentId=` fan-out; `oversight` rows that have no MVP
+ * endpoint render honest em-dashes (§19.2 rejects AuditEvent).
+ */
 export interface UserDetail extends ConsoleUser {
+  /** Always empty — no contact endpoint exists (parity §5.4 shows `—`). */
   extras: ContactExtras;
   theses: ThesisCard[];
-  audit: AuditRow[];
+  /** Sum of milestones across the student's projects (§16.3 rail). */
+  milestones: number;
   activity: ActivityItem[];
   oversight: Oversight;
-}
-
-export interface SecurityLog {
-  id: string;
-  action: string;
-  target: string;
-  actor: string;
-  when: string;
-  severity: 'ok' | 'warn' | 'danger';
+  /** Rail fan-out failed — cards render honest error copy, core stays. */
+  railsError: boolean;
 }
 
 export interface CreateUserInput {
@@ -138,15 +131,15 @@ export interface ListUsersArgs {
   limit: number;
 }
 
-/** Aggregate cards on /users (spec §4: total is live when obtainable). */
+/**
+ * Aggregate cards on /users — four live `limit=1` probes (Phase 14 fixture
+ * rail: Students-page pattern; mockup numbers replaced by honest counts).
+ */
 export interface ConsoleStats {
   total: number;
   students: number;
   faculty: number;
-  alerts: number;
-  totalDelta: string;
-  engagement: string;
-  facultyNote: string;
-  alertsNote: string;
+  inactive: number;
+  /** True when any probe failed — all four fall back to sample numbers. */
   usedFallback: boolean;
 }

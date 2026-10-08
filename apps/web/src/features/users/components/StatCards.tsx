@@ -1,4 +1,4 @@
-import { ShieldAlert, UserRound, UsersRound, Zap } from 'lucide-react';
+import { UserRound, UserX, UsersRound, Zap } from 'lucide-react';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -14,35 +14,39 @@ interface Tile {
   valueClass?: string;
 }
 
-/** Four aggregate cards (spec §5.2). Only the total can come live (§4). */
+/**
+ * Four aggregate cards (mockup parity §5.2 layout) — every value is a live
+ * `limit=1` probe now (Phase 14 fixture rail); fallbacks carry "(sample)".
+ */
 export default function StatCards({ stats }: { stats: ConsoleStats }) {
+  const sample = stats.usedFallback ? ' (sample)' : '';
   const tiles: Tile[] = [
     {
       label: 'Total Accounts',
       value: stats.total.toLocaleString('en-US'),
-      note: stats.usedFallback ? `${stats.totalDelta} (sample)` : stats.totalDelta,
+      note: `All directory accounts${sample}`,
       icon: UsersRound,
       iconClass: 'bg-primary/10 text-primary',
     },
     {
-      label: 'Active Students',
+      label: 'Students',
       value: stats.students.toLocaleString('en-US'),
-      note: stats.engagement,
+      note: `Accounts with the student role${sample}`,
       icon: UserRound,
       iconClass: 'bg-success-bg text-success',
     },
     {
       label: 'Faculty Members',
       value: stats.faculty.toLocaleString('en-US'),
-      note: stats.facultyNote,
+      note: `Accounts with the supervisor role${sample}`,
       icon: Zap,
       iconClass: 'bg-secondary text-secondary-foreground',
     },
     {
-      label: 'System Alerts',
-      value: String(stats.alerts).padStart(2, '0'),
-      note: stats.alertsNote,
-      icon: ShieldAlert,
+      label: 'Inactive Accounts',
+      value: stats.inactive.toLocaleString('en-US'),
+      note: `Deactivated (isActive = false)${sample}`,
+      icon: UserX,
       iconClass: 'bg-danger-bg text-danger',
       noteClass: 'text-danger',
       valueClass: 'text-danger',

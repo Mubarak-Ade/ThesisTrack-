@@ -50,10 +50,6 @@ function NotFound() {
   );
 }
 
-/** Fixture counters in the header card (spec §5.4). */
-const MILESTONES = '14';
-const DEPT_FALLBACK = 'Informatics & AI';
-
 /** Honest helper copy for the §11.0.2 `program` field (ADR-16 auto-match). */
 const PROGRAM_HINT =
   'ADR-16: the student’s program selects their workflow at approval; blank = default workflow.';
@@ -160,7 +156,10 @@ function ProgramPanel({
   );
 }
 
-/** User Profile (spec §5.4): live core + fixture rails; Reset Password = re-invite. */
+/**
+ * User Profile (mockup parity §5.4): live core + live project rails (§16.3
+ * User details); Reset Password = re-invite.
+ */
 export default function UserProfile() {
   const { userId } = useParams<{ userId: string }>();
   const [detail, setDetail] = useState<UserDetail | null | undefined>(undefined);
@@ -285,8 +284,7 @@ export default function UserProfile() {
                       <StatusBadge status={detail.status} className="uppercase" />
                     </div>
                     <p className="mt-1.5 text-sm text-muted-foreground">
-                      {titleCaseRole(detail.role)} •{' '}
-                      {detail.extras.department ?? detail.department ?? DEPT_FALLBACK}
+                      {titleCaseRole(detail.role)} • {detail.program ?? 'Unaffiliated'}
                     </p>
                   </div>
                 </div>
@@ -305,7 +303,7 @@ export default function UserProfile() {
                       Milestones
                     </p>
                     <p className="mt-1 font-display text-3xl font-bold text-foreground">
-                      {MILESTONES}
+                      {String(detail.milestones).padStart(2, '0')}
                     </p>
                   </div>
                 </div>
@@ -316,7 +314,7 @@ export default function UserProfile() {
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="min-w-0 space-y-4 lg:col-span-2">
               <ThesisAssignments detail={detail} />
-              <AuditLogs detail={detail} />
+              <AuditLogs />
               <ActivityFeed detail={detail} />
             </div>
             <div className="space-y-4">

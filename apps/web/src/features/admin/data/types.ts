@@ -217,7 +217,10 @@ export interface ReportCounts {
   projectsCompleted: number;
   projectsArchived: number;
   proposalsTotal: number;
+  proposalsDraft: number;
   proposalsSubmitted: number;
+  proposalsUnderReview: number;
+  proposalsRevisionRequired: number;
   proposalsApproved: number;
   proposalsRejected: number;
 }

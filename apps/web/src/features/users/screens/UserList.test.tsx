@@ -2,14 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
-import type { ConsoleUser, ConsoleStats, SecurityLog, UsersPage } from '../data/types';
-import { getStats, listSecurityLogs, listUsers } from '../data/usersRepo';
+import type { ConsoleUser, ConsoleStats, UsersPage } from '../data/types';
+import { getStats, listUsers } from '../data/usersRepo';
 import UserList from './UserList';
 
 vi.mock('../data/usersRepo', () => ({
   listUsers: vi.fn(),
   getStats: vi.fn(),
-  listSecurityLogs: vi.fn(),
 }));
 
 const MARCUS: ConsoleUser = {
@@ -42,17 +41,9 @@ const STATS: ConsoleStats = {
   total: 1248,
   students: 842,
   faculty: 156,
-  alerts: 4,
-  totalDelta: '+12 this month',
-  engagement: '92% engagement',
-  facultyNote: '12 departments',
-  alertsNote: 'Pending verification',
+  inactive: 4,
   usedFallback: false,
 };
-
-const LOGS: SecurityLog[] = [
-  { id: 'sl-1', action: 'Password Reset', target: 'Marcus Holloway', actor: 'System', when: '12 MINS AGO', severity: 'ok' },
-];
 
 function page(items: ConsoleUser[], usedFallback = false): UsersPage {
   return { items, total: items.length, page: 1, limit: 20, usedFallback };
@@ -68,7 +59,6 @@ const renderList = () =>
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getStats).mockResolvedValue(STATS);
-  vi.mocked(listSecurityLogs).mockResolvedValue(LOGS);
 });
 
 describe('UserList (plan 4)', () => {
@@ -134,5 +124,21 @@ describe('UserList (plan 4)', () => {
 
     expect(await screen.findByText('Marcus Holloway')).toBeInTheDocument();
     expect(screen.queryByText(/showing sample data/i)).not.toBeInTheDocument();
+  });
+
+  it('renders the four live stat probes and the honest security rail (Phase 14)', async () => {
+    vi.mocked(listUsers).mockResolvedValue(page([MARCUS]));
+
+    renderList();
+
+    expect(await screen.findByText('Total Accounts')).toBeInTheDocument();
+    expect(screen.getByText('Students')).toBeInTheDocument();
+    expect(screen.getByText('Faculty Members')).toBeInTheDocument();
+    expect(screen.getByText('Inactive Accounts')).toBeInTheDocument();
+    expect(screen.getByText('1,248')).toBeInTheDocument();
+    // Honest no-endpoint copy instead of fixture log rows (spec §19.2).
+    expect(screen.getByText(/no security-audit endpoint exists/i)).toBeInTheDocument();
+    expect(screen.queryByText('Password Reset')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /full audit log/i })).not.toBeInTheDocument();
   });
 });

@@ -69,8 +69,14 @@ function routeLive(options: { projectStatus?: string } = {}): void {
       return Promise.resolve({ proposals: [], pagination: { page: 1, limit: 1, total: 3 } });
     }
     if (path === `/students/${USER_1.id}/supervisor`) {
+      // Real §5.3 shape: the person nests under `active.supervisor`.
       return Promise.resolve({
-        active: { id: 'f-1', firstName: 'Elena', lastName: 'Rossi', isActive: true },
+        active: {
+          id: 'f-1',
+          isPrimary: true,
+          endedAt: null,
+          supervisor: { id: 'u-9', firstName: 'Elena', lastName: 'Rossi', isActive: true },
+        },
         history: [],
       });
     }

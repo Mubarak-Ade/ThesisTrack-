@@ -18,7 +18,9 @@
   --muted-foreground: 220 8% 42%;
   --accent: 60 12% 96%;
   --accent-foreground: 220 15% 12%;
-  --destructive: 350 64% 58%;
+  /* 52% (was 58%) — white-on-destructive hits 4.76:1, WCAG AA for the
+     14px button/badge text (lighthouse color-contrast, Phase 14 sweep). */
+  --destructive: 350 64% 52%;
   --destructive-foreground: 0 0% 100%;
   --border: 60 10% 90%;
   --input: 60 10% 90%;
@@ -28,7 +30,9 @@
   /* Brand extras used by custom components */
   --surface: #fafaf8;
   --surface-alt: #f4f4f1;
-  --danger: #d4445b;
+  /* #c5374e (was #d4445b) — 5.2:1 on white, 4.76:1 on --danger-bg; the old
+     shade measured 4.40/4.02 and failed WCAG AA (Phase 14 sweep). */
+  --danger: #c5374e;
   --danger-bg: #fdf2f4;
   --success: #15803d;
   --success-bg: #f2f9f4;

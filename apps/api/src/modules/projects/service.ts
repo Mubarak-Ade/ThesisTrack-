@@ -56,6 +56,9 @@ export async function listProjectsFor(
       return { projects: [], total: 0 };
     }
     filters.projectIds = projectIds;
+  } else if (query.studentId) {
+    // Administrator narrowing to one student (§16.3 User details fan-out).
+    filters.studentId = query.studentId;
   }
 
   const { rows, total } = await repo.listProjects(filters);

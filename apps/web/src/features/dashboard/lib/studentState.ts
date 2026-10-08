@@ -7,11 +7,13 @@
  *
  * Proposal precedence when a student has several rows (the API's I4 keeps at
  * most one *in-flight*, so the only mixes are in-flight + terminal):
- *   1. in-flight first — revision_required (student must act) >
- *      submitted/under_review (waiting on supervisor) > draft (must submit);
- *   2. then approved (State 5 — a later draft cannot hide an approval);
- *   3. then rejected (State 4);
- *   4. nothing → State 1.
+ *   1. pending in-flight first — revision_required (student must act) >
+ *      submitted/under_review (waiting on supervisor);
+ *   2. then approved (State 5 — a later stray draft cannot hide an approval:
+ *      `approved + project` is the table's own condition for State 5);
+ *   3. then a draft (State 1's PROPOSED slot, "Continue Draft");
+ *   4. then rejected (State 4);
+ *   5. nothing → State 1.
  */
 
 export const PROPOSAL_STATUSES = [
@@ -100,25 +102,23 @@ export function resolveStudentState(input: StudentStateInput): StudentStateResul
   }
 
   const inFlight = pickInFlight(input.proposals);
-  if (inFlight) {
-    const state: StudentState =
-      inFlight.status === 'revision_required'
-        ? 3
-        : inFlight.status === 'draft'
-          ? 1
-          : 2;
-    return {
-      state,
-      hasDraft: inFlight.status === 'draft',
-      proposal: inFlight,
-      project,
-      supervisor,
-    };
+  const approved = input.proposals.find((p) => p.status === 'approved') ?? null;
+
+  // Genuinely pending rows outrank everything: the student must revise, or the
+  // supervisor is still reviewing (I4 keeps at most one such row anyway).
+  if (inFlight && inFlight.status !== 'draft') {
+    const state: StudentState = inFlight.status === 'revision_required' ? 3 : 2;
+    return { state, hasDraft: false, proposal: inFlight, project, supervisor };
   }
 
-  const approved = input.proposals.find((p) => p.status === 'approved') ?? null;
+  // State 5 next — a stray later draft must not hide an approval.
   if (approved) {
     return { state: 5, hasDraft: false, proposal: approved, project, supervisor };
+  }
+
+  // Draft alone → State 1's PROPOSED slot ("Continue Draft").
+  if (inFlight) {
+    return { state: 1, hasDraft: true, proposal: inFlight, project, supervisor };
   }
 
   const rejected = [...input.proposals].sort(newest).find((p) => p.status === 'rejected') ?? null;

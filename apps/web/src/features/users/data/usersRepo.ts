@@ -6,23 +6,25 @@
  * Screens import from this file (or `data/index`) — never raw DTOs.
  */
 import { api, ApiError } from '@/lib/api/http';
+import { formatRelative } from '@/lib/utils/time';
+import { ROLE_LABELS } from './constants';
 import {
+  mapActivityEntries,
   mapCreatedUser,
   mapImportResult,
+  mapMilestoneCount,
+  mapProjectRefs,
+  mapSupervisorName,
   mapUserDetail,
   mapUsersPage,
+  toActivityItem,
   toCreateBody,
   toImportPayload,
-  withExtras,
+  withRails,
 } from './mappers';
-import {
-  MOCK_CONTACT_EXTRAS,
-  MOCK_SECURITY_LOGS,
-  MOCK_STATS,
-  MOCK_USERS,
-  PROFILE_RAILS,
-} from './mock/fixtures';
+import { MOCK_STATS, MOCK_USERS } from './mock/fixtures';
 import type {
+  ActivityItem,
   ConsoleStats,
   ConsoleUser,
   CreatedUser,
@@ -30,7 +32,8 @@ import type {
   ImportResult,
   ImportRow,
   ListUsersArgs,
-  SecurityLog,
+  Oversight,
+  ThesisCard,
   UpdateUserInput,
   UserDetail,
   UsersPage,
@@ -81,29 +84,84 @@ export async function listUsers(args: ListUsersArgs): Promise<UsersPage> {
   }
 }
 
-/** Stat cards: total live via a `limit=1` probe; the rest have no endpoint. */
+/** `limit=1` probe → `pagination.total` (structure drift throws → fallback). */
+async function probeTotal(path: string): Promise<number> {
+  return mapUsersPage(await api.get<unknown>(path)).total;
+}
+
+/** Stat cards: four live `limit=1` probes (§16.3 — Students-page pattern). */
 export async function getStats(): Promise<ConsoleStats> {
-  const base = {
-    students: MOCK_STATS.students,
-    faculty: MOCK_STATS.faculty,
-    alerts: MOCK_STATS.alerts,
-    totalDelta: MOCK_STATS.totalDelta,
-    engagement: MOCK_STATS.engagement,
-    facultyNote: MOCK_STATS.facultyNote,
-    alertsNote: MOCK_STATS.alertsNote,
-  };
   try {
-    const { total } = mapUsersPage(await api.get<unknown>('/users?page=1&limit=1'));
-    return { ...base, total, usedFallback: false };
+    const [total, students, faculty, inactive] = await Promise.all([
+      probeTotal('/users?page=1&limit=1'),
+      probeTotal('/users?role=student&limit=1'),
+      probeTotal('/users?role=supervisor&limit=1'),
+      probeTotal('/users?isActive=false&limit=1'),
+    ]);
+    return { total, students, faculty, inactive, usedFallback: false };
   } catch (error) {
     warn('getStats', error);
-    return { ...base, total: MOCK_STATS.total, usedFallback: true };
+    return { ...MOCK_STATS, usedFallback: true };
   }
 }
 
+/** Honest oversight rows — no sign-in/creation audit exists (spec §19.2). */
+const NO_AUDIT_OVERSIGHT: Oversight = { lastLogin: '—', createdBy: '—', permissions: '—' };
+
+/** Feed cap — the rail shows the most recent entries, bounded fan-out. */
+const ACTIVITY_CAP = 10;
+
+interface ProjectRails {
+  theses: ThesisCard[];
+  milestones: number;
+  activity: ActivityItem[];
+}
+
 /**
- * Profile: live core merged with fixture extras/rails. Unknown id → null
- * (honest not-found; a fixture id falls back to its sample row).
+ * Live rails (§16.3 User details): the profile's own projects
+ * (`GET /projects?studentId=&limit=100`), then a per-project supervisor /
+ * milestones / activity fan-out — bounded by that list, never the whole
+ * department. Any failure throws; `getUser` turns it into `railsError`.
+ */
+async function fetchRails(studentId: string): Promise<ProjectRails> {
+  const projects = mapProjectRefs(
+    await api.get<unknown>(`/projects?studentId=${studentId}&limit=100`),
+  );
+  const perProject = await Promise.all(
+    projects.map(async (project) => {
+      const [supervisor, milestones, activity] = await Promise.all([
+        api.get<unknown>(`/projects/${project.id}/supervisor`),
+        api.get<unknown>(`/projects/${project.id}/milestones`),
+        api.get<unknown>(`/projects/${project.id}/activity`),
+      ]);
+      return {
+        thesis: {
+          code: `#${project.id.slice(0, 8)}`,
+          badge: project.status.toUpperCase(),
+          title: project.title,
+          supervisor: mapSupervisorName(supervisor),
+          updated: formatRelative(project.updatedAt) || '—',
+        },
+        milestoneCount: mapMilestoneCount(milestones),
+        entries: mapActivityEntries(activity),
+      };
+    }),
+  );
+  return {
+    theses: perProject.map((row) => row.thesis),
+    milestones: perProject.reduce((sum, row) => sum + row.milestoneCount, 0),
+    activity: perProject
+      .flatMap((row) => row.entries)
+      .sort((a, b) => b.atMs - a.atMs)
+      .slice(0, ACTIVITY_CAP)
+      .map((entry) => toActivityItem(entry)),
+  };
+}
+
+/**
+ * Profile: live core + live project rails (§16.3 "User details ✅"). A failed
+ * fan-out keeps the profile and flags `railsError` (honest error copy);
+ * unknown id → null (honest not-found; a fixture id falls back to its row).
  */
 export async function getUser(id: string): Promise<UserDetail | null> {
   let core: ConsoleUser;
@@ -118,7 +176,24 @@ export async function getUser(id: string): Promise<UserDetail | null> {
     warn('getUser', error);
     core = fixture;
   }
-  return withExtras(core, MOCK_CONTACT_EXTRAS[core.id] ?? null, PROFILE_RAILS);
+  const oversight: Oversight = {
+    ...NO_AUDIT_OVERSIGHT,
+    // Live-derived: the role defines the account's permissions (§4.5).
+    permissions: core.role === 'coordinator' ? 'Coordinator' : ROLE_LABELS[core.role] ?? '—',
+  };
+  try {
+    const rails = await fetchRails(core.id);
+    return withRails(core, { ...rails, oversight, railsError: false });
+  } catch (error) {
+    warn('getUser: rails', error);
+    return withRails(core, {
+      theses: [],
+      milestones: 0,
+      activity: [],
+      oversight,
+      railsError: true,
+    });
+  }
 }
 
 /** Provisioning write — throws ApiError for the form to render (Rule 3). */
@@ -146,11 +221,6 @@ export async function importUsers(rows: ImportRow[]): Promise<ImportResult> {
 export async function updateUser(id: string, patch: UpdateUserInput): Promise<ConsoleUser> {
   const payload = await api.patch<unknown>(`/users/${id}`, patch);
   return mapUserDetail(payload);
-}
-
-/** Security-log rail — no endpoint, always fixtures (async for uniform shape). */
-export async function listSecurityLogs(): Promise<SecurityLog[]> {
-  return MOCK_SECURITY_LOGS;
 }
 
 export { ApiError };

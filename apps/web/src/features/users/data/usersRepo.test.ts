@@ -14,7 +14,6 @@ import {
   getStats,
   getUser,
   importUsers,
-  listSecurityLogs,
   listUsers,
   sendInvite,
   updateUser,
@@ -76,49 +75,127 @@ describe('listUsers', () => {
 });
 
 describe('getStats', () => {
-  it('uses the live total from a limit=1 probe', async () => {
-    get.mockResolvedValue({ users: [], pagination: { page: 1, limit: 1, total: 3 } });
+  it('probes four live totals (§16.3 stat cards)', async () => {
+    get.mockImplementation(() =>
+      Promise.resolve({ users: [], pagination: { page: 1, limit: 1, total: 7 } }),
+    );
+
     const stats = await getStats();
-    expect(stats.total).toBe(3);
-    expect(stats.usedFallback).toBe(false);
-    expect(stats.students).toBeGreaterThan(0); // non-endpoint stats stay fixture-backed
-    expect(get.mock.calls[0]![0]).toContain('limit=1');
+
+    expect(stats).toEqual({ total: 7, students: 7, faculty: 7, inactive: 7, usedFallback: false });
+    const urls = get.mock.calls.map((call) => call[0]);
+    expect(urls).toEqual([
+      '/users?page=1&limit=1',
+      '/users?role=student&limit=1',
+      '/users?role=supervisor&limit=1',
+      '/users?isActive=false&limit=1',
+    ]);
   });
 
-  it('falls back to the fixture total when the probe fails', async () => {
+  it('falls back to the sample snapshot when a probe fails', async () => {
     get.mockRejectedValue(new Error('down'));
+
     const stats = await getStats();
-    expect(stats.usedFallback).toBe(true);
-    expect(stats.total).toBe(1248);
+
+    expect(stats).toEqual({ total: 1248, students: 842, faculty: 156, inactive: 4, usedFallback: true });
+    expect(console.warn).toHaveBeenCalled();
   });
 });
 
 describe('getUser', () => {
-  it('merges live core with fixture extras and rails', async () => {
-    get.mockResolvedValue({
-      user: {
-        id: MARCUS.id,
-        firstName: 'Marcus',
-        lastName: 'Holloway',
-        email: 'm.holloway@student.edu',
-        role: 'student',
-        isActive: true,
-        status: 'ACTIVE',
-        createdAt: '2023-09-12T09:00:00.000Z',
-      },
+  const PROJECT_ID = 'aaaa1111-2222-4333-8444-555555555555';
+
+  /** Route the profile core + the rail fan-out by URL. */
+  function mockProfile(opts: { projects?: unknown[]; failRails?: boolean } = {}) {
+    get.mockImplementation((path) => {
+      if (path === `/users/${MARCUS.id}`) {
+        return Promise.resolve({
+          user: {
+            id: MARCUS.id,
+            firstName: 'Marcus',
+            lastName: 'Holloway',
+            email: 'm.holloway@student.edu',
+            role: 'student',
+            isActive: true,
+            status: 'ACTIVE',
+            createdAt: '2023-09-12T09:00:00.000Z',
+          },
+        });
+      }
+      if (opts.failRails) return Promise.reject(new Error('rails down'));
+      if (path.startsWith('/projects?studentId=')) {
+        return Promise.resolve({
+          projects:
+            opts.projects ??
+            [{ id: PROJECT_ID, title: 'Edge Theses', status: 'active', updatedAt: '2026-10-01T10:00:00.000Z' }],
+        });
+      }
+      if (path === `/projects/${PROJECT_ID}/supervisor`) {
+        return Promise.resolve({ active: { supervisor: { firstName: 'Elena', lastName: 'Rossi' } } });
+      }
+      if (path === `/projects/${PROJECT_ID}/milestones`) {
+        return Promise.resolve({ milestones: [{ id: 'm1' }, { id: 'm2' }] });
+      }
+      if (path === `/projects/${PROJECT_ID}/activity`) {
+        return Promise.resolve({
+          activity: [{ kind: 'submission.created', summary: 'Draft uploaded', at: '2026-10-01T10:00:00.000Z' }],
+        });
+      }
+      return Promise.reject(new Error(`unexpected GET ${path}`));
     });
+  }
+
+  it('maps live core plus the live project rails (§16.3)', async () => {
+    mockProfile();
 
     const detail = await getUser(MARCUS.id);
-    expect(detail?.extras.phone).toBe('+1 (555) 012-3456');
-    expect(detail?.theses).toHaveLength(2);
-    expect(detail?.audit.length).toBeGreaterThan(0);
-    expect(detail?.code).toBe('USR-0000'); // live rows derive USR-XXXX from the id (spec §4)
+
+    expect(detail?.code).toBe('USR-0000'); // live rows derive USR-XXXX from the id (§4)
+    expect(detail?.railsError).toBe(false);
+    expect(detail?.theses).toHaveLength(1);
+    expect(detail?.theses[0]).toEqual({
+      code: '#aaaa1111',
+      badge: 'ACTIVE',
+      title: 'Edge Theses',
+      supervisor: 'Elena Rossi',
+      updated: expect.any(String),
+    });
+    expect(detail?.milestones).toBe(2);
+    expect(detail?.activity).toHaveLength(1);
+    expect(detail?.activity[0]).toMatchObject({ iconKind: 'upload', strong: 'Draft uploaded' });
+    // Honest oversight: no sign-in audit (§19.2), permissions derived from role.
+    expect(detail?.oversight).toEqual({ lastLogin: '—', createdBy: '—', permissions: 'Student' });
+    // No contact endpoint — extras always empty (parity §5.4 `—` rows).
+    expect(detail?.extras.phone).toBeNull();
+  });
+
+  it('returns empty rails for a profile with no projects', async () => {
+    mockProfile({ projects: [] });
+
+    const detail = await getUser(MARCUS.id);
+
+    expect(detail?.theses).toEqual([]);
+    expect(detail?.milestones).toBe(0);
+    expect(detail?.activity).toEqual([]);
+    expect(detail?.railsError).toBe(false);
+  });
+
+  it('keeps the profile and flags railsError when the fan-out fails', async () => {
+    mockProfile({ failRails: true });
+
+    const detail = await getUser(MARCUS.id);
+
+    expect(detail?.code).toBe('USR-0000');
+    expect(detail?.railsError).toBe(true);
+    expect(detail?.theses).toEqual([]);
+    expect(console.warn).toHaveBeenCalled();
   });
 
   it('returns the fixture row for a known id when the API fails', async () => {
     get.mockRejectedValue(new ApiError({ status: 500, code: 'INTERNAL', message: 'boom' }));
     const detail = await getUser(MARCUS.id);
     expect(detail?.code).toBe('USR-9012');
+    expect(detail?.railsError).toBe(true); // the fan-out failed with it
     expect(console.warn).toHaveBeenCalled();
   });
 
@@ -238,13 +315,5 @@ describe('writes', () => {
     await expect(updateUser(MARCUS.id, { program: 'x'.repeat(300) })).rejects.toBeInstanceOf(
       ApiError,
     );
-  });
-});
-
-describe('listSecurityLogs', () => {
-  it('returns the fixture rail', async () => {
-    const logs = await listSecurityLogs();
-    expect(logs).toHaveLength(4);
-    expect(logs[0]).toMatchObject({ action: 'Password Reset', severity: 'ok' });
   });
 });

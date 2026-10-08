@@ -10,6 +10,8 @@ export const projectIdParamsSchema = z.object({
 export const listProjectsQuerySchema = paginationQuerySchema.extend({
   status: z.enum(['active', 'completed', 'archived']).optional(),
   q: z.string().trim().max(200).optional(),
+  /** §16.3 User details — an administrator narrowing to one student's rows. */
+  studentId: z.string().uuid('Invalid student id').optional(),
 });
 
 /**

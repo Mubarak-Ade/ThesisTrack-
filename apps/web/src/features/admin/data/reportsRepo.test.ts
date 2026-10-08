@@ -42,7 +42,7 @@ beforeEach(() => {
 });
 
 describe('getReportCounts (live probes)', () => {
-  it('issues ten limit=1 probes and maps every headline number', async () => {
+  it('issues thirteen limit=1 probes and maps every headline number', async () => {
     const totals: Record<string, number> = {
       '/projects?page=1&limit=1': 20,
       '/projects?page=1&limit=1&status=active': 12,
@@ -51,7 +51,10 @@ describe('getReportCounts (live probes)', () => {
       '/users?role=student&page=1&limit=1': 41,
       '/users?role=supervisor&page=1&limit=1': 7,
       '/proposals?page=1&limit=1': 30,
+      '/proposals?status=draft&page=1&limit=1': 2,
       '/proposals?status=submitted&page=1&limit=1': 9,
+      '/proposals?status=under_review&page=1&limit=1': 2,
+      '/proposals?status=revision_required&page=1&limit=1': 0,
       '/proposals?status=approved&page=1&limit=1': 14,
       '/proposals?status=rejected&page=1&limit=1': 3,
     };
@@ -70,11 +73,14 @@ describe('getReportCounts (live probes)', () => {
       projectsCompleted: 5,
       projectsArchived: 3,
       proposalsTotal: 30,
+      proposalsDraft: 2,
       proposalsSubmitted: 9,
+      proposalsUnderReview: 2,
+      proposalsRevisionRequired: 0,
       proposalsApproved: 14,
       proposalsRejected: 3,
     });
-    expect(get).toHaveBeenCalledTimes(10);
+    expect(get).toHaveBeenCalledTimes(13);
     expect(
       get.mock.calls.every((call) => String(call[0]).includes('limit=1')),
     ).toBe(true);

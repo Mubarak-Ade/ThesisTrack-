@@ -123,7 +123,7 @@ export default function AdminReports() {
         <StatCard
           label="Proposals"
           value={c.proposalsTotal}
-          sub={`${c.proposalsSubmitted} submitted · ${c.proposalsApproved} approved · ${c.proposalsRejected} rejected`}
+          sub={`${c.proposalsDraft} draft · ${c.proposalsSubmitted} submitted · ${c.proposalsUnderReview} under review · ${c.proposalsRevisionRequired} revision required · ${c.proposalsApproved} approved · ${c.proposalsRejected} rejected`}
         />
       </section>
 

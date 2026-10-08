@@ -119,8 +119,13 @@ async function fetchSupervisorName(studentId: string): Promise<string> {
     );
   }
   if (payload.active === null || payload.active === undefined) return 'Unassigned';
+  // The assignment row nests the person under `supervisor` (§5.3's
+  // `{active: {…, supervisor: {firstName, lastName}}}` — same shape the
+  // Assignments screen reads). Flat `active.firstName` silently rendered
+  // "Unassigned" for every student (Phase 14 visual pass).
   const active = asRecord(payload.active);
-  return `${str(active.firstName)} ${str(active.lastName)}`.trim() || 'Unassigned';
+  const person = asRecord(active.supervisor);
+  return `${str(person.firstName)} ${str(person.lastName)}`.trim() || 'Unassigned';
 }
 
 /** `limit=1` probe → `pagination.total` (spec §5.6 stat cards). */

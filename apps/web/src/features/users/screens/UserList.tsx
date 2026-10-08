@@ -4,8 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { downloadCsv } from '@/lib/csv';
 import { Button } from '@/components/ui/button';
 import { Download, UserPlus } from 'lucide-react';
-import type { ConsoleStats, Role, SecurityLog, UsersPage } from '../data/types';
-import { getStats, listSecurityLogs, listUsers } from '../data/usersRepo';
+import type { ConsoleStats, Role, UsersPage } from '../data/types';
+import { getStats, listUsers } from '../data/usersRepo';
 import Pagination from '@/components/ui/pagination';
 import SampleDataBanner from '@/components/feedback/SampleDataBanner';
 import SecurityLogsRail from '../components/SecurityLogsRail';
@@ -27,8 +27,9 @@ function compareUsers(
 }
 
 /**
- * All Users (spec §5.2): live list/search/filter/paging via `listUsers`,
- * client-side sorting of the loaded page, mock stats/security rails.
+ * All Users (mockup parity §5.2): live list/search/filter/paging via
+ * `listUsers`, client-side sorting of the loaded page, four live stat probes
+ * and an honest no-endpoint security rail (spec §19.2).
  */
 export default function UserList() {
   const navigate = useNavigate();
@@ -41,7 +42,6 @@ export default function UserList() {
   const [sort, setSort] = useState<SortState>({ key: 'name', dir: 'asc' });
   const [data, setData] = useState<UsersPage | null>(null);
   const [stats, setStats] = useState<ConsoleStats | null>(null);
-  const [logs, setLogs] = useState<SecurityLog[]>([]);
 
   // Debounced search (350ms) — each keystroke only updates `search`.
   useEffect(() => {
@@ -63,9 +63,6 @@ export default function UserList() {
     let alive = true;
     void getStats().then((next) => {
       if (alive) setStats(next);
-    });
-    void listSecurityLogs().then((next) => {
-      if (alive) setLogs(next);
     });
     return () => {
       alive = false;
@@ -196,9 +193,9 @@ export default function UserList() {
           loading={data === null}
         />
 
-        {/* Full-width 2-col below the grid (spec §5.2). */}
+        {/* Full-width 2-col below the grid (mockup parity §5.2). */}
         <div className="grid gap-4 lg:grid-cols-2">
-          <SecurityLogsRail logs={logs} />
+          <SecurityLogsRail />
           <BulkEnrollmentCard />
         </div>
       </div>
