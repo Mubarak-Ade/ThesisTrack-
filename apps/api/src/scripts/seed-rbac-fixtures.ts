@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { db } from '../config/db.js';
 import { users, projects, supervisorAssignments } from '../schema/index.js';
 import { hashPassword } from '../modules/auth/service.js';
@@ -67,6 +67,19 @@ async function upsertAssignment(
   supervisorId: string,
   ended: boolean,
 ): Promise<void> {
+  if (!ended) {
+    // Reconcile stale state before activating (I13): the partial unique index
+    // idx_supervisor_assignments_active_student allows only one ACTIVE row per
+    // student, and an interrupted earlier run (or a hand-edited DB) can leave
+    // one behind for a different supervisor. End every active row first so the
+    // activation below cannot trip the index; the row we are about to make
+    // active is re-activated immediately after.
+    await db
+      .update(supervisorAssignments)
+      .set({ endedAt: new Date() })
+      .where(and(eq(supervisorAssignments.studentId, studentId), isNull(supervisorAssignments.endedAt)));
+  }
+
   const existing = await db.query.supervisorAssignments.findFirst({
     where: and(
       eq(supervisorAssignments.studentId, studentId),
