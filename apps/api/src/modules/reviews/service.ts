@@ -1,6 +1,7 @@
 import { db } from '../../config/db.js';
 import { BusinessRuleError, NotFoundError } from '../../errors/index.js';
 import { notify } from '../../lib/notify.js';
+import { assertProjectIdNotArchived } from '../projects/service.js';
 import { getSubmissionDetail } from '../submissions/service.js';
 import type { SubmissionRow, SubmissionStatus, SubmissionView } from '../submissions/types.js';
 import { findActiveSupervisorIdForStudent } from '../supervisor-assignments/service.js';
@@ -67,6 +68,7 @@ export async function createReview(
   input: CreateReviewInput,
   reviewerId: string,
 ): Promise<{ review: ReviewView; submission: SubmissionView }> {
+  await assertProjectIdNotArchived(submission.projectId); // §5.8 — archived projects are read-only
   // Reads before the transaction, the proposals convention: validation
   // errors abort before any row moves.
   const reviewer = await findUserById(reviewerId);

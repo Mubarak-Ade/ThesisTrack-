@@ -21,6 +21,7 @@ import {
 } from '../../lib/storage.js';
 import type { AuthUser } from '../../middleware/auth.js';
 import type { ProjectRow } from '../projects/types.js';
+import { assertProjectIdNotArchived } from '../projects/service.js';
 import { findActiveSupervisorIdForStudent } from '../supervisor-assignments/service.js';
 import { toPublicUser } from '../users/service.js';
 import type {
@@ -228,6 +229,7 @@ export async function createSubmission(
   input: CreateSubmissionInput,
   file?: UploadedFile,
 ): Promise<SubmissionView> {
+  await assertProjectIdNotArchived(input.projectId); // §5.8 — archived projects are read-only
   if (input.milestoneId) {
     const milestone = await repo.findMilestoneInProject(input.milestoneId, input.projectId);
     if (!milestone) {
@@ -338,6 +340,7 @@ export async function patchSubmission(
   submission: SubmissionRow,
   input: PatchSubmissionInput,
 ): Promise<SubmissionView> {
+  await assertProjectIdNotArchived(submission.projectId); // §5.8
   if (input.milestoneId) {
     const milestone = await repo.findMilestoneInProject(input.milestoneId, submission.projectId);
     if (!milestone) {
@@ -411,6 +414,7 @@ export async function submitSubmission(
   submission: SubmissionRow,
   userId: string,
 ): Promise<SubmissionView> {
+  await assertProjectIdNotArchived(submission.projectId); // §5.8
   await db.transaction(async (tx) => {
     const next = await repo.nextVersionNumber(submission.id, tx);
     if (next === 1) {
@@ -450,6 +454,7 @@ export async function appendVersion(
   input: { file?: UploadedFile; body?: string },
   userId: string,
 ): Promise<{ submission: SubmissionView; version: SubmissionVersionView }> {
+  await assertProjectIdNotArchived(submission.projectId); // §5.8
   const clean = normalizeBody(input.body);
   if (!input.file && typeof clean !== 'string') {
     throw new ValidationError('A file or a body is required', [
@@ -515,6 +520,7 @@ export async function appendVersion(
  * a lost file is an orphan, a row without bytes would 404 forever.
  */
 export async function deleteSubmission(submission: SubmissionRow): Promise<SubmissionView> {
+  await assertProjectIdNotArchived(submission.projectId); // §5.8
   const view = toView(await loadDetail(submission.id));
 
   await db.transaction(async (tx) => {

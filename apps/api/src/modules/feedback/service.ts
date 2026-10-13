@@ -3,6 +3,7 @@ import { NotFoundError, ValidationError } from '../../errors/index.js';
 import { notify } from '../../lib/notify.js';
 import { htmlToText, sanitizeProposalBody } from '../../lib/sanitize.js';
 import type { ProjectRow } from '../projects/types.js';
+import { assertProjectIdNotArchived, assertProjectNotArchived } from '../projects/service.js';
 import { findActiveSupervisorIdForStudent } from '../supervisor-assignments/service.js';
 import { findUserById, toPublicUser } from '../users/service.js';
 import type { CreateFeedbackInput, PatchFeedbackInput } from './schema.js';
@@ -61,6 +62,7 @@ export async function createFeedback(
   input: CreateFeedbackInput,
   authorId: string,
 ): Promise<FeedbackView> {
+  assertProjectNotArchived(project); // §5.8 — archived projects are read-only
   const author = await findUserById(authorId);
   if (!author) {
     throw new ValidationError('Unknown author', [{ path: 'authorId', message: 'User not found' }]);
@@ -101,6 +103,7 @@ export async function patchFeedback(
   feedback: FeedbackWithAuthor,
   input: PatchFeedbackInput,
 ): Promise<FeedbackView> {
+  await assertProjectIdNotArchived(feedback.projectId); // §5.8
   const body = normalizeBody(input.body);
   const updated = await repo.updateFeedback(feedback.id, body);
   if (!updated) {
@@ -111,6 +114,7 @@ export async function patchFeedback(
 
 /** DELETE /feedback/:feedbackId — author or administrator (§11.7). */
 export async function deleteFeedback(feedback: FeedbackWithAuthor): Promise<FeedbackView> {
+  await assertProjectIdNotArchived(feedback.projectId); // §5.8
   await repo.deleteFeedback(feedback.id);
   return toView(feedback);
 }

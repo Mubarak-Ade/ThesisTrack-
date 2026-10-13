@@ -4,6 +4,7 @@ import { notify } from '../../lib/notify.js';
 import type { Role } from '../../lib/roles.js';
 import type { AuthUser } from '../../middleware/auth.js';
 import type { ProjectRow } from '../projects/types.js';
+import { assertProjectIdNotArchived, assertProjectNotArchived } from '../projects/service.js';
 import { findActiveSupervisorIdForStudent } from '../supervisor-assignments/service.js';
 import * as repo from './repository.js';
 import * as templates from './templates.js';
@@ -62,6 +63,7 @@ export async function createMilestone(
   project: ProjectRow,
   input: CreateMilestoneInput,
 ): Promise<MilestoneView> {
+  assertProjectNotArchived(project); // §5.8 — archived projects are read-only
   const position = await repo.nextPosition(project.id);
   const created = await repo.insertMilestone({
     projectId: project.id,
@@ -79,6 +81,7 @@ export async function patchMilestone(
   milestone: MilestoneRow,
   input: PatchMilestoneInput,
 ): Promise<MilestoneView> {
+  await assertProjectIdNotArchived(milestone.projectId); // §5.8
   const updated = await repo.updateMilestone(milestone.id, {
     ...(input.title !== undefined ? { title: input.title } : {}),
     ...(input.description !== undefined ? { description: input.description } : {}),
@@ -88,6 +91,7 @@ export async function patchMilestone(
 }
 
 export async function deleteMilestone(milestone: MilestoneRow): Promise<MilestoneView> {
+  await assertProjectIdNotArchived(milestone.projectId); // §5.8
   const removed = await repo.deleteMilestone(milestone.id);
   return toMilestoneView(removed ?? milestone);
 }
@@ -131,6 +135,7 @@ export async function changeStatus(
   input: ChangeMilestoneStatusInput,
   user: AuthUser,
 ): Promise<MilestoneView> {
+  assertProjectNotArchived(project); // §5.8
   const to = input.status;
 
   if (milestone.status === to) {
@@ -201,6 +206,7 @@ export async function reorderMilestones(
   project: ProjectRow,
   input: ReorderMilestonesInput,
 ): Promise<MilestoneView[]> {
+  assertProjectNotArchived(project); // §5.8
   const rows = await repo.listForProject(project.id);
   const known = new Set(rows.map((row) => row.id));
   const incoming = new Set(input.order);
@@ -245,6 +251,7 @@ export async function applyTemplate(
   project: ProjectRow,
   template: MilestoneTemplateRow,
 ): Promise<MilestoneView[]> {
+  assertProjectNotArchived(project); // §5.8
   if (template.items.length === 0) {
     return []; // empty template → zero milestones, never a failure (§5.4 twin)
   }
@@ -276,6 +283,7 @@ export async function applyTemplateById(
   project: ProjectRow,
   templateId: string,
 ): Promise<MilestoneView[]> {
+  assertProjectNotArchived(project); // §5.8
   const template = await templates.findTemplateById(templateId);
   if (!template) {
     throw new ValidationError('Invalid template', [

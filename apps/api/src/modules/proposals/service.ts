@@ -14,6 +14,7 @@ import type { Role } from '../../lib/roles.js';
 import { htmlToText, sanitizeProposalBody } from '../../lib/sanitize.js';
 import { removeFileQuietly, resolveStorageKey, UPLOADS_ROOT } from '../../lib/storage.js';
 import type { AuthUser } from '../../middleware/auth.js';
+import { assertProjectIdNotArchived } from '../projects/service.js';
 import type { ProjectRow } from '../projects/types.js';
 import type { UserRow } from '../users/types.js';
 import {
@@ -48,6 +49,17 @@ import type {
   ReviewView,
   UploadedFile,
 } from './types.js';
+
+/**
+ * §5.8 read-only: only a proposal that owns an approved project carries a
+ * `projectId` (§8.3) — those writes are blocked once the project is archived.
+ * A `projectId: null` proposal predates any project and is unaffected.
+ */
+async function assertProposalWritable(proposal: ProposalRow): Promise<void> {
+  if (proposal.projectId) {
+    await assertProjectIdNotArchived(proposal.projectId);
+  }
+}
 
 /* -------------------------------------------------- workflow (spec §5.4) */
 
@@ -274,6 +286,7 @@ export async function patchProposal(
   proposal: ProposalRow,
   input: PatchProposalInput,
 ): Promise<ProposalView> {
+  await assertProposalWritable(proposal); // §5.8 — an archived project's proposal is read-only
   const updated = await repo.editProposal(proposal.id, {
     title: input.title,
     abstract: input.abstract,
@@ -292,6 +305,7 @@ export async function patchProposal(
  * both) passes. Then `version++` freezes this version's documents (I14).
  */
 export async function submitProposal(proposal: ProposalRow): Promise<ProposalView> {
+  await assertProposalWritable(proposal); // §5.8
   const hasBody = proposal.body !== null && htmlToText(proposal.body).trim() !== '';
   const attachmentCount = await repo.countAttachments(proposal.id);
   if (!hasBody && attachmentCount === 0) {
@@ -327,6 +341,7 @@ export async function submitProposal(proposal: ProposalRow): Promise<ProposalVie
 
 /** POST /proposals/:proposalId/start-review — submitted → under_review. */
 export async function startReview(proposal: ProposalRow): Promise<ProposalView> {
+  await assertProposalWritable(proposal); // §5.8
   const updated = await repo.transitionProposal(proposal.id, 'under_review', ['submitted']);
   if (!updated) {
     throw transitionRace('start-review', proposal.status);
@@ -364,6 +379,7 @@ export async function reviewProposal(
   input: ReviewProposalInput,
   reviewerId: string,
 ): Promise<ReviewResult> {
+  await assertProposalWritable(proposal); // §5.8
   // All reads happen before the transaction: validation errors abort before
   // any row moves, and the transaction below stays writes-only.
   const reviewer = await findUserById(reviewerId);
@@ -579,6 +595,7 @@ export async function addAttachment(
   file: UploadedFile,
   uploaderId: string,
 ): Promise<ProposalAttachmentView> {
+  await assertProposalWritable(proposal); // §5.8
   const row = await repo.insertAttachment({
     proposalId: proposal.id,
     proposalVersion: proposal.version,
@@ -601,6 +618,7 @@ export async function addAttachment(
 export async function removeAttachment(
   bundle: { attachment: ProposalAttachmentRow; proposal: ProposalRow },
 ): Promise<ProposalAttachmentView> {
+  await assertProposalWritable(bundle.proposal); // §5.8
   const removed = await repo.deleteAttachment(bundle.attachment.id);
   if (!removed) {
     throw new ConflictError('This attachment can no longer be deleted');

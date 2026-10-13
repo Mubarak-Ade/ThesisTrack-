@@ -1,5 +1,5 @@
 import { db } from '../../config/db.js';
-import { ConflictError, ValidationError } from '../../errors/index.js';
+import { BusinessRuleError, ConflictError, NotFoundError, ValidationError } from '../../errors/index.js';
 import type { AuthUser } from '../../middleware/auth.js';
 import { findUserById } from '../users/service.js';
 import {
@@ -18,6 +18,27 @@ import type { ActivityEvent, ProjectListFilters, ProjectListItem, ProjectRow } f
 /** Business-layer entry point for fetching a project (validates id shape). */
 export function getProjectById(id: string): Promise<ProjectRow | undefined> {
   return repo.findProjectById(id);
+}
+
+/**
+ * §5.8 read-only: an archived project accepts no writes. Same 422 shape as
+ * supervisor-assignments' active-project guard; the admin `PATCH
+ * /projects/:id` status path (the archive/restore action itself) is not
+ * routed through this guard.
+ */
+export function assertProjectNotArchived(project: Pick<ProjectRow, 'status'>): void {
+  if (project.status === 'archived') {
+    throw new BusinessRuleError('This project is archived — it is read-only (§5.8)');
+  }
+}
+
+/** Id-keyed form for write paths that hold a child row, not the project row. */
+export async function assertProjectIdNotArchived(projectId: string): Promise<void> {
+  const project = await getProjectById(projectId);
+  if (!project) {
+    throw new NotFoundError('Project');
+  }
+  assertProjectNotArchived(project);
 }
 
 /** Postgres unique_violation — I1's race loser answers with the same 409. */
