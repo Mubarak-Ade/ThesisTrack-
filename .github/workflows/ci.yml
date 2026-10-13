@@ -1,0 +1,110 @@
+# CI — lint → typecheck → build → unit/integration → authz selftest → system
+# tests, against a postgres service container (spec §18.9, plan 15.4).
+#
+# CD (auto-deploy on merge) is REJECTED for MVP: deployment is the documented
+# manual gate in docs/deployment.md.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: thesistrack
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: thesistrack_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U thesistrack -d thesistrack_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgresql://thesistrack:ci@localhost:5432/thesistrack_ci
+      JWT_ACCESS_SECRET: ci-only-not-a-real-secret-0123456789abcdef
+      ADMIN_EMAIL: admin@ci.local
+      ADMIN_PASSWORD: CiAdminPass123!
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.5.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Build (shared, api, web)
+        run: pnpm build
+
+      - name: UI tests
+        run: pnpm --filter @thesistrack/web test
+
+      - name: Schema push (CI database)
+        run: pnpm db:push
+
+      - name: API unit + integration tests
+        run: pnpm --filter @thesistrack/api test
+
+      - name: Authorization selftest
+        run: pnpm --filter @thesistrack/api authz:selftest
+
+      - name: Seed baseline (admin, workflows, milestone templates)
+        run: |
+          pnpm --filter @thesistrack/api seed:admin
+          pnpm --filter @thesistrack/api seed:workflows
+          pnpm --filter @thesistrack/api seed:templates
+
+      - name: Start API (normal TTL) and API (3s TTL for the expiry tests)
+        run: |
+          pnpm --filter @thesistrack/api start &
+          ACCESS_TOKEN_TTL=3 PORT=4001 pnpm --filter @thesistrack/api start &
+          for i in $(seq 1 40); do
+            ok=1
+            curl -sf -o /dev/null http://localhost:3001/api/v1/health || ok=
+            curl -sf -o /dev/null http://localhost:4001/api/v1/health || ok=
+            [ -n "$ok" ] && break
+            sleep 1
+          done
+          curl -sf http://localhost:3001/api/v1/health
+          curl -sf http://localhost:4001/api/v1/health
+
+      - name: System suite — auth lifecycle (against the 3s-TTL instance)
+        # The two token-expiry assertions cannot pass against the normal 900s
+        # TTL, so the whole suite runs against the companion instance on 4001.
+        run: PORT=4001 bash apps/api/tests/auth-flow.sh
+        env:
+          ADMIN_EMAIL: admin@ci.local
+          ADMIN_PASSWORD: CiAdminPass123!
+
+      - name: System suites — user management, rbac, assignments, workflow
+        run: |
+          bash apps/api/tests/user-mgmt.sh
+          bash apps/api/tests/rbac.sh
+          bash apps/api/tests/assignment.sh
+          bash apps/api/tests/system/workflow.sh
+        env:
+          ADMIN_EMAIL: admin@ci.local
+          ADMIN_PASSWORD: CiAdminPass123!

@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { API_PREFIX } from '../config/paths.js';
 import { AuthenticationError } from '../errors/index.js';
 import { verifyAccessToken } from '../lib/jwt.js';
 import { Role } from '../lib/roles.js';
@@ -20,19 +21,24 @@ declare global {
 /**
  * Endpoints that run without an access token.
  * Everything else — including GET /auth/me — requires `Authorization: Bearer <jwt>`.
+ *
+ * Suffixes are spelled without the mount prefix and joined to `API_PREFIX`
+ * here, so the allowlist cannot drift from the routes.ts mount (plan 15.6).
  */
-const PUBLIC_PATHS = new Set([
-  '/api/v1/health',
-  '/api/v1/auth/login',
-  '/api/v1/auth/refresh',
-  '/api/v1/auth/logout',
-  '/api/v1/auth/forgot-password',
-  '/api/v1/auth/reset-password',
-  '/api/v1/auth/activate',
-]);
+const PUBLIC_PATHS = new Set(
+  [
+    '/health',
+    '/auth/login',
+    '/auth/refresh',
+    '/auth/logout',
+    '/auth/forgot-password',
+    '/auth/reset-password',
+    '/auth/activate',
+  ].map((suffix) => `${API_PREFIX}${suffix}`),
+);
 
 /** Public prefixes — for routes with a dynamic token segment. */
-const PUBLIC_PREFIXES = ['/api/v1/auth/invitation/'];
+const PUBLIC_PREFIXES = [`${API_PREFIX}/auth/invitation/`];
 
 /**
  * Authentication stage: "who are you?" — verifies the short-lived access

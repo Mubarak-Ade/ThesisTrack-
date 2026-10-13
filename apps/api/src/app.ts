@@ -10,7 +10,9 @@ import routes from './routes.js';
 
 const app = express();
 
-if (env.NODE_ENV === 'production') {
+// 0. Behind the §18.2 reverse proxy in production: trust X-Forwarded-* so
+//    req.ip, CORS and logs see the real client (TRUST_PROXY, spec §18.4).
+if (env.TRUST_PROXY) {
   app.set('trust proxy', 1);
 }
 

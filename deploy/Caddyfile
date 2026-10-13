@@ -1,0 +1,17 @@
+# ThesisTrack TLS edge — Caddy 2 (spec §18.5, plan 15.1).
+#
+# Enable with:  docker compose --profile caddy up -d
+# Requires DOMAIN in the root .env and the domain's A/AAAA record pointing at
+# this host. Caddy provisions and renews Let's Encrypt certificates itself;
+# HTTP is redirected to HTTPS automatically.
+#
+# After one clean week behind valid TLS, uncomment the HSTS header (§18.5).
+
+{$DOMAIN:localhost} {
+	encode gzip
+
+	reverse_proxy web:80
+
+	# §18.5 — enable after one clean week:
+	# header Strict-Transport-Security "max-age=604800; includeSubDomains"
+}

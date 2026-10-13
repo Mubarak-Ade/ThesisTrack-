@@ -1,0 +1,14 @@
+# Build-context exclusions for both images (plan 15.1/15.2).
+# The compose build context is the repo root (workspace manifests + shared
+# package must be in context), so everything not needed by a build stays out.
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/tsconfig.tsbuildinfo
+**/uploads
+.shots-review
+.claude
+docs
+.git

@@ -1,0 +1,93 @@
+# ThesisTrack — single-host deployment stack (spec §18.2/§18.3, plan 15.1).
+#
+#   cp .env.example .env         # fill POSTGRES_PASSWORD + JWT_ACCESS_SECRET
+#   pnpm db:push                 # schema (from a trusted checkout, see docs/deployment.md)
+#   docker compose up -d --build
+#
+# Services: postgres → api (healthcheck-gated) → web. Optional TLS edge:
+#   docker compose --profile caddy up -d --build   (needs DOMAIN in .env)
+#
+# Interpolated variables come from a root `.env` (gitignored). Every API key
+# not listed here has a safe default in apps/api/src/config/env.ts — the full
+# list lives in apps/api/.env.example.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-thesistrack}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-thesistrack}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U thesistrack"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      # Same database the db service just created; password injected from .env.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-thesistrack}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-thesistrack}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
+      # §18.4: true when serving over HTTPS (the caddy profile), false on plain http.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      # Token lifetimes use the §18.4 defaults (900 / 604800 / 259200 / 3600).
+    volumes:
+      # §14.7 — named volume, never baked into the image.
+      - uploads:/app/uploads
+    ports:
+      # Published for ops/health probes; normal traffic arrives via the web
+      # proxy (nginx or caddy) at /api.
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/api/v1/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+
+  # Optional TLS edge (§18.5) — enable with: docker compose --profile caddy up -d
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["caddy"]
+    restart: unless-stopped
+    depends_on:
+      - api
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:

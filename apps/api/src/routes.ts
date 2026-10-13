@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { API_PREFIX } from './config/paths.js';
 import healthRoutes from './routes/health.js';
 import { routes as authRoutes } from './modules/auth/index.js';
 import { routes as usersRoutes } from './modules/users/index.js';
@@ -50,6 +51,6 @@ api.use(reviewsRoutes);
 api.use(feedbackRoutes);
 api.use(notificationsRoutes);
 
-routes.use('/api/v1', api);
+routes.use(API_PREFIX, api);
 
 export default routes;
