@@ -171,3 +171,45 @@ describe('login (plan 4.1)', () => {
     client.defaults.adapter = originalAdapter;
   });
 });
+
+describe('invitation resend entry (orphan prevention)', () => {
+  it('Login offers "Request a new one" and it routes to the resend form', async () => {
+    renderLogin();
+
+    fireEvent.click(screen.getByRole('link', { name: /request a new one/i }));
+
+    expect(
+      await screen.findByRole('heading', { name: /didn't get your invitation/i }),
+    ).toBeTruthy();
+  });
+
+  it('the resend form posts the email and lands on the enumeration-safe "check your email" screen', async () => {
+    const requested: string[] = [];
+    installAdapter((config) => {
+      requested.push(config.url ?? '');
+      if (config.url === '/auth/resend-invitation') {
+        return {
+          status: 200,
+          data: {
+            success: true,
+            data: { message: 'If an invitation is pending for that email, a new invitation link has been sent.' },
+          },
+        };
+      }
+      return envelopeError('NOT_FOUND', 'x', 404);
+    });
+
+    renderLogin();
+    fireEvent.click(screen.getByRole('link', { name: /request a new one/i }));
+    fireEvent.change(await screen.findByLabelText(/institutional email address/i), {
+      target: { value: 'invited.student@university.edu' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /send invitation link/i }));
+
+    // The sent screen's copy never confirms existence — constant-200 UX.
+    expect(await screen.findByText(/fresh activation link is on its way/i)).toBeTruthy();
+    expect(requested).toContain('/auth/resend-invitation');
+
+    client.defaults.adapter = originalAdapter;
+  });
+});

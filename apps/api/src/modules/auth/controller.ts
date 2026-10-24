@@ -80,9 +80,33 @@ export const forgotPassword = asyncHandler(async (req, res) => {
     message: 'If an account exists for that email, a password reset link has been sent.',
   };
   // No mailer is wired up yet: expose the token outside production so the
-  // flow can be exercised end-to-end.
+  // flow can be exercised end-to-end. Mailer design §6/G2 — the dev token is
+  // now accompanied by the email it belongs to, so a console-less client can
+  // still correlate the two. Gated to non-prod AND token-exists: in production
+  // (or for an unknown/inactive account) neither field appears, keeping the
+  // constant-200 enumeration-safe shape untouched.
   if (env.NODE_ENV !== 'production' && token) {
     data.devToken = token;
+    data.email = email;
+  }
+  respond(res, 200, data);
+});
+
+// POST /auth/resend-invitation
+export const resendInvitation = asyncHandler(async (req, res) => {
+  const { email } = req.body as ForgotPasswordInput;
+  const { token } = await authService.requestInvitationResend(email);
+
+  const data: Record<string, unknown> = {
+    message: 'If an invitation is pending for that email, a new invitation link has been sent.',
+  };
+  // Same dev/prod gating as forgot-password (mailer design §7/G2): outside
+  // production the response echoes the FRESH token so the orphan-invitation
+  // flow can be exercised without a mailbox; in production the shape stays
+  // constant-200 and enumeration-safe either way.
+  if (env.NODE_ENV !== 'production' && token) {
+    data.devToken = token;
+    data.email = email;
   }
   respond(res, 200, data);
 });

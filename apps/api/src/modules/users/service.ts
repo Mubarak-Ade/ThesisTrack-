@@ -6,6 +6,7 @@ import {
   type ErrorDetail,
 } from '../../errors/index.js';
 import { db } from '../../config/db.js';
+import { dispatchInvitationEmail } from '../../lib/mailer.js';
 import { issueActivationToken, revokeAllSessions } from '../auth/service.js';
 import {
   countOtherActiveAdministrators,
@@ -108,6 +109,11 @@ export async function provisionUser(input: ProvisionInput): Promise<ProvisionedA
 
   const { token, expiresAt } = await issueActivationToken(user.id);
 
+  // Mailer design §7: send AFTER the insert commits, fire-and-forget (void) —
+  // a slow/down relay never affects the HTTP response. On an idempotent replay
+  // the controller never re-runs, so no second email.
+  dispatchInvitationEmail(user, token, expiresAt);
+
   return { user, activationToken: token, activationExpiresAt: expiresAt, reinvited };
 }
 
@@ -209,6 +215,11 @@ export async function resendInvitation(userId: string): Promise<InvitedAccount> 
   }
 
   const { token, expiresAt } = await issueActivationToken(user.id);
+
+  // Mailer design §7: post-issue, fire-and-forget. The fresh token supersedes
+  // any outstanding link, so at most one invitation link is ever valid.
+  dispatchInvitationEmail(user, token, expiresAt);
+
   return { user, activationToken: token, activationExpiresAt: expiresAt };
 }
 
@@ -248,7 +259,11 @@ export async function importUsers(input: ImportUsersInput): Promise<ImportResult
     throw new BusinessRuleError('Import validation failed', details);
   }
 
-  return db.transaction(async (tx) => {
+  // Mailer design §7: send the N invitation emails strictly AFTER the batch
+  // transaction COMMITS. SMTP is not transactional — a send inside the tx
+  // would mail links to users a rollback then erases. A failed import mails
+  // nobody; the awaited tx resolves only on commit.
+  const result = await db.transaction(async (tx) => {
     const rows = await insertUsers(
       input.users.map((user) => ({
         firstName: user.firstName,
@@ -274,4 +289,16 @@ export async function importUsers(input: ImportUsersInput): Promise<ImportResult
 
     return { users: rows, invitations };
   });
+
+  // Committed — dispatch fire-and-forget. `rows` and `invitations` are
+  // index-aligned (both built in the same loop over `rows`), so zip them to
+  // recover each recipient's name for the template.
+  result.users.forEach((row, index) => {
+    const invitation = result.invitations[index];
+    if (invitation) {
+      dispatchInvitationEmail(row, invitation.activationToken, invitation.activationExpiresAt);
+    }
+  });
+
+  return result;
 }

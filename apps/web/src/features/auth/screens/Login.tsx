@@ -161,6 +161,15 @@ function Login() {
                 Activate your invitation
               </Link>
             </p>
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              Invitation email never arrived?{' '}
+              <Link
+                to="/resend-invitation"
+                className="font-semibold text-foreground underline-offset-4 hover:text-primary hover:underline"
+              >
+                Request a new one
+              </Link>
+            </p>
           </div>
         </CardContent>
       </Card>

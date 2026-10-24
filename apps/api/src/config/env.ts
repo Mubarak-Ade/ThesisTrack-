@@ -31,4 +31,42 @@ export const env = cleanEnv(process.env, {
   // download route (ADR-09, §14.5).
   UPLOAD_DIR: str({ default: './uploads' }),
   UPLOAD_MAX_BYTES: num({ default: 20971520 }), // 20 MB (§14.4)
+
+  // ── Mailer (spec: mailer design §5, D2) ─────────────────────────────
+  // Behind the swappable `sendMail` interface (ADR-09 pattern) there are now
+  // TWO transports, chosen at send time by which credentials are present:
+  //
+  //   BREVO_API_KEY  Brevo transactional REST API (api.brevo.com). Takes
+  //                  precedence when set. No SMTP/DNS/SPF needed to start —
+  //                  the sender is just MAIL_FROM, which must be a verified
+  //                  SENDER in the Brevo console (a personal mailbox works; a
+  //                  custom domain is NOT required to begin). Ideal for the
+  //                  Render deploy with no domain yet.
+  //   SMTP_*         nodemailer over SMTP (the original seam). Used when
+  //                  BREVO_API_KEY is empty and SMTP_HOST is set.
+  //
+  // EVERY value defaults so an unset BREVO_API_KEY + SMTP_HOST still boots
+  // cleanly and `sendMail` takes its no-network `skipped:'unconfigured'` path —
+  // that is what keeps the ~400-test suite and the bash suites green with no
+  // mail configured (spec §4, §12).
+  //
+  //   BREVO_API_KEY  '' = not using Brevo. e.g. xkeysib-…
+  //   SMTP_HOST      '' = unconfigured -> no-op. e.g. smtp.postmarkapi.co, SES.
+  //                  NOT consumer Gmail for production (datacenter IPs blocked;
+  //                  spec §11) — point at a reputation-managed relay.
+  //   SMTP_PORT      587 (STARTTLS) by default; 465 when SMTP_SECURE=true.
+  //   SMTP_USER      optional — local relays (MailHog/Mailtrap) need no auth.
+  //   SMTP_PASS      required only when SMTP_USER is set (checked in mailer.ts).
+  //   SMTP_SECURE    true = implicit TLS/465; false = STARTTLS/587.
+  //   MAIL_FROM      required to send, e.g. "ThesisTrack <no-reply@domain.edu>".
+  //
+  // Cross-field rules (host/user/pass/from) are enforced in lib/mailer.ts at
+  // send time, NOT by envalid, so a missing host/key never blocks boot.
+  BREVO_API_KEY: str({ default: '' }),
+  SMTP_HOST: str({ default: '' }),
+  SMTP_PORT: num({ default: 587 }),
+  SMTP_USER: str({ default: '' }),
+  SMTP_PASS: str({ default: '' }),
+  SMTP_SECURE: bool({ default: false }),
+  MAIL_FROM: str({ default: '' }),
 });

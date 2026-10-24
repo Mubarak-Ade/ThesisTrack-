@@ -32,6 +32,8 @@ const PUBLIC_PATHS = new Set(
     '/auth/refresh',
     '/auth/logout',
     '/auth/forgot-password',
+    // Self-service invitation resend — same enumeration-safe public contract.
+    '/auth/resend-invitation',
     '/auth/reset-password',
     '/auth/activate',
   ].map((suffix) => `${API_PREFIX}${suffix}`),

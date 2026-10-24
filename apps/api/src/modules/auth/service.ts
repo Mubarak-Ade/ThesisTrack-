@@ -8,12 +8,17 @@ import {
   ValidationError,
 } from '../../errors/index.js';
 import { generateToken, hashToken } from '../../lib/tokens.js';
+import { dispatchPasswordResetEmail } from '../../lib/mailer.js';
 import { purgeExpiredIdempotencyKeys } from '../../middleware/idempotency.js';
 // Cross-module calls go through users/service.ts (ADR-02), never its repository.
 // This completes an auth ↔ users cycle; both sides call into each other from
 // inside function bodies and all involved exports are hoisted declarations, so
 // module evaluation order is irrelevant.
-import { findUserByEmail as findUserByEmailRow, updateUserPassword } from '../users/service.js';
+import {
+  findUserByEmail as findUserByEmailRow,
+  resendInvitation as reissueInvitation,
+  updateUserPassword,
+} from '../users/service.js';
 import type { UserRow } from '../users/types.js';
 import {
   consumeAccountTokenIfUnused,
@@ -264,12 +269,59 @@ export async function requestPasswordReset(email: string): Promise<PasswordReset
 
   const issued = await issueAccountToken(user.id, 'password_reset');
 
-  // Production: email `issued.token` to the user.
-  console.log(
-    `[password-reset] token for ${user.email}: ${issued.token} (expires ${issued.expiresAt.toISOString()})`,
-  );
+  // Mailer design §7: send AFTER the token row commits, fire-and-forget (void).
+  // The token is delivered by email now (production) / response (dev, Phase 2);
+  // a relay failure never changes this endpoint's 200.
+  dispatchPasswordResetEmail(user, issued.token, issued.expiresAt);
+
+  // Production: the token is delivered by email only (production) / response
+  // (dev). The console sink is gated to non-prod (mailer design §7/G2) so a
+  // production leak can never surface a reset token on stdout.
+  if (env.NODE_ENV !== 'production') {
+    console.log(
+      `[password-reset] token for ${user.email}: ${issued.token} (expires ${issued.expiresAt.toISOString()})`,
+    );
+  }
 
   return { token: issued.token };
+}
+
+// ── Invitation resend (self-service orphan prevention) ──────────────────────
+
+/**
+ * POST /auth/resend-invitation — the forgot-password twin for invitations.
+ *
+ * Closes the orphan-account loop: an INVITED user whose email never arrived
+ * (dead relay, typo'd address, lost spam folder) pulls a fresh link through
+ * the SAME path the admin resend uses (users/service.resendInvitation —
+ * latest-wins token rotation + fire-and-forget dispatch), so at most one
+ * invitation link is ever valid.
+ *
+ * Guards, mirroring requestPasswordReset's enumeration contract:
+ *   - only NEVER-ACTIVATED accounts (passwordHash IS NULL, status INVITED)
+ *     may re-invite — a deactivated (formerly active) account must go through
+ *     admin reactivation and can never self-resurrect here, and an active
+ *     account has nothing to resend;
+ *   - unknown emails and ineligible accounts resolve `{}` → the controller
+ *     keeps the constant-200, enumeration-safe shape either way.
+ */
+export async function requestInvitationResend(email: string): Promise<{ token?: string }> {
+  const user = await findUserByEmailRow(email);
+  if (!user || user.passwordHash) {
+    return {};
+  }
+
+  const { activationToken, activationExpiresAt } = await reissueInvitation(user.id);
+
+  // Non-prod console sink (mailer design §7/G2): production delivery is
+  // email-only; the response carries devToken via the controller instead.
+  if (env.NODE_ENV !== 'production') {
+    console.log(
+      `[invitation-resend] token for ${user.email}: ${activationToken} (expires ${activationExpiresAt.toISOString()}, latest wins)`,
+    );
+  }
+
+  return { token: activationToken };
 }
 
 // ── Invitation preview ────────────────────────────────────────────────

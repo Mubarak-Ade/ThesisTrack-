@@ -7,6 +7,7 @@ import DashboardByRole from './DashboardByRole';
 import ErrorBoundary from '@/components/feedback/ErrorBoundary';
 import Forbidden from '@/features/auth/screens/Forbidden';
 import ForgotPassword from '@/features/auth/screens/ForgotPassword';
+import InvitationResent from '@/features/auth/screens/InvitationResent';
 import InviteActivate from '@/features/auth/screens/InviteActivate';
 import InviteAlreadyActivated from '@/features/auth/screens/InviteAlreadyActivated';
 import InviteConfirm from '@/features/auth/screens/InviteConfirm';
@@ -15,6 +16,7 @@ import InviteSuccess from '@/features/auth/screens/InviteSuccess';
 import InviteWelcome from '@/features/auth/screens/InviteWelcome';
 import Login from '@/features/auth/screens/Login';
 import PasswordResetEmailSent from '@/features/auth/screens/PasswordResetEmailSent';
+import ResendInvitation from '@/features/auth/screens/ResendInvitation';
 import PasswordResetSuccess from '@/features/auth/screens/PasswordResetSuccess';
 import ResetPassword from '@/features/auth/screens/ResetPassword';
 import SessionExpired from '@/features/auth/screens/SessionExpired';
@@ -148,6 +150,8 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/forgot-password/sent" element={<PasswordResetEmailSent />} />
+        <Route path="/resend-invitation" element={<ResendInvitation />} />
+        <Route path="/resend-invitation/sent" element={<InvitationResent />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/reset-password/success" element={<PasswordResetSuccess />} />
 

@@ -26,9 +26,13 @@ export const create = asyncHandler(async (req, res) => {
     );
 
     const publicUser = toPublicUser(user);
-    console.log(
-        `[invitation] ${publicUser.email} activation token: ${activationToken} (expires ${activationExpiresAt.toISOString()})`
-    );
+    // Token console sink gated to non-prod (mailer design §7/G2): production
+    // delivers the token by email only — never to stdout.
+    if (env.NODE_ENV !== 'production') {
+        console.log(
+            `[invitation] ${publicUser.email} activation token: ${activationToken} (expires ${activationExpiresAt.toISOString()})`
+        );
+    }
 
     const data: Record<string, unknown> = {
         user: publicUser,
@@ -77,9 +81,11 @@ export const invite = asyncHandler(async (req, res) => {
     const { user, activationToken, activationExpiresAt } = await resendInvitation(userId);
 
     const publicUser = toPublicUser(user);
-    console.log(
-        `[invitation] ${publicUser.email} activation token: ${activationToken} (expires ${activationExpiresAt.toISOString()})`
-    );
+    if (env.NODE_ENV !== 'production') {
+        console.log(
+            `[invitation] ${publicUser.email} activation token: ${activationToken} (expires ${activationExpiresAt.toISOString()})`
+        );
+    }
 
     const data: Record<string, unknown> = {
         user: publicUser,
@@ -100,9 +106,11 @@ export const importUsers = asyncHandler(async (req, res) => {
     const { users, invitations } = await importUsersRows(req.body as ImportUsersInput);
 
     for (const invitation of invitations) {
-        console.log(
-            `[invitation] ${invitation.email} activation token: ${invitation.activationToken} (expires ${invitation.activationExpiresAt.toISOString()})`
-        );
+        if (env.NODE_ENV !== 'production') {
+            console.log(
+                `[invitation] ${invitation.email} activation token: ${invitation.activationToken} (expires ${invitation.activationExpiresAt.toISOString()})`
+            );
+        }
     }
 
     const data: Record<string, unknown> = {

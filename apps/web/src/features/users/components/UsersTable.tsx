@@ -1,9 +1,12 @@
-import { ChevronDown, ChevronUp, ChevronsUpDown, Clock, EllipsisVertical, UserRound } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Clock, EllipsisVertical, Mail, UserRound } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
+import { ApiError } from '@/lib/api/http';
 import { cn } from '@/lib/utils';
 import type { ConsoleUser, UserStatus } from '../data/types';
+import { sendInvite } from '../data/usersRepo';
 import { Avatar } from '@/components/ui/avatar';
 import RoleBadge from './RoleBadge';
 
@@ -58,7 +61,25 @@ function SortHeader({
 
 function RowMenu({ user }: { user: ConsoleUser }) {
   const [open, setOpen] = useState(false);
+  const [resending, setResending] = useState(false);
   const name = `${user.firstName} ${user.lastName}`;
+
+  // Orphan-account prevention: INVITED rows get a one-click resend that hits
+  // the same admin re-invite endpoint as the details screen ("Reset Password").
+  async function handleResend() {
+    if (resending) return;
+    setResending(true);
+    try {
+      await sendInvite(user.id);
+      toast.success(`Invitation re-sent to ${user.email}`);
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError ? error.message : 'Unable to re-send the invitation. Try again.',
+      );
+    } finally {
+      setResending(false);
+    }
+  }
 
   return (
     <div className="relative text-right">
@@ -93,6 +114,21 @@ function RowMenu({ user }: { user: ConsoleUser }) {
             <UserRound className="size-4 text-muted-foreground" aria-hidden="true" />
             View profile
           </Link>
+          {user.status === 'INVITED' && (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={resending}
+              onClick={() => {
+                setOpen(false);
+                void handleResend();
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent disabled:opacity-60"
+            >
+              <Mail className="size-4 text-muted-foreground" aria-hidden="true" />
+              {resending ? 'Sending…' : 'Resend invitation'}
+            </button>
+          )}
         </div>
       )}
     </div>
