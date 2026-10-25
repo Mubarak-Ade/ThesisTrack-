@@ -1,0 +1,42 @@
+# Render Blueprint — API + PostgreSQL only (spec §18.4 delta, 2026-10-25).
+# The web app deploys to Vercel separately (docs/deployment.md §10).
+#
+# Create via Render → New → Blueprint → this repo, or copy these settings into
+# the dashboard manually. Fill the `sync: false` values when prompted:
+#   WEB_ORIGIN   → https://<project>.vercel.app (comma-separate extra origins)
+#   BREVO_API_KEY / MAIL_FROM → optional; leave blank to disable mail
+services:
+  - type: web
+    name: thesistrack-api
+    runtime: docker
+    # The image builds the pnpm workspace, so the context is the repo root and
+    # the Dockerfile stays under apps/api (same file the compose stack uses).
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: thesistrack-db
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: WEB_ORIGIN
+        sync: false
+      # *.onrender.com → *.vercel.app is cross-site: the refresh cookie needs
+      # SameSite=None (and Secure). Prefer custom subdomains (app./api.example.com)
+      # and switch this to `lax` — see docs/deployment.md §10.3.
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: COOKIE_SAME_SITE
+        value: none
+      - key: TRUST_PROXY
+        value: "true"
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+databases:
+  - name: thesistrack-db

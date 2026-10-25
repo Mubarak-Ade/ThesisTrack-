@@ -4,7 +4,9 @@ import { env } from '../config/env.js';
 /**
  * Refresh token cookie:
  * - HTTP-only  → never readable from JavaScript (access token stays in memory)
- * - SameSite=Lax → sent on same-site XHR, blocked on cross-site requests
+ * - SameSite from COOKIE_SAME_SITE (default Lax) → `none` is required when the
+ *   web and API live on different registrable domains (Vercel + Render); it
+ *   needs COOKIE_SECURE=true. Same-site subdomains keep `lax`.
  * - path-scoped to the auth endpoints so it is not sent with regular API calls
  * - Secure when COOKIE_SECURE=true (HTTPS deployments)
  */
@@ -15,7 +17,7 @@ function cookieOptions(expires?: Date) {
   return {
     httpOnly: true,
     secure: env.COOKIE_SECURE,
-    sameSite: 'lax' as const,
+    sameSite: env.COOKIE_SAME_SITE as 'lax' | 'strict' | 'none',
     path: COOKIE_PATH,
     expires,
   };

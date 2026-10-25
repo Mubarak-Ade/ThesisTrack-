@@ -46,9 +46,33 @@ export BREVO_API_KEY=''
 
 if [ "${1:-}" = "--reset" ]; then
   bash scripts/test-db.sh reset
+  # Match CI's baseline (seed:admin → seed:workflows → seed:templates,
+  # .github/workflows/ci.yml). Without the workflow seed a fresh scratch DB has
+  # no §8.10 default definition, and the §16.3 set-default block has no
+  # "previous holder" to clear — a suite failure that says nothing about the
+  # product. Both seeds are idempotent.
+  npx tsx src/scripts/seed-workflows.ts
+  npx tsx src/scripts/seed-milestone-templates.ts
 fi
 
-cleanup() { kill "$(jobs -p)" 2>/dev/null || true; }
+cleanup() {
+  # Unquoted on purpose: `jobs -p` prints one PID per line and the shell must
+  # word-split them — quoting turns "pid1\npid2" into a single invalid PID.
+  # shellcheck disable=SC2046
+  kill $(jobs -p) 2>/dev/null || true
+  # `npx tsx` runs the server as a grandchild, so killing the job alone can
+  # leave the listener orphaned (and the next run's port guard then refuses to
+  # start). Close the two suite ports by PID as well; ss is Linux-only, so skip
+  # silently elsewhere — the job kill above still covers the common case.
+  if command -v ss >/dev/null 2>&1; then
+    local pid
+    for pid in $(ss -tlnp 2>/dev/null |
+      grep -E ":($SUITE_PORT|$EXPIRY_PORT)[[:space:]]" |
+      grep -oP 'pid=\K[0-9]+' | sort -u); do
+      kill "$pid" 2>/dev/null || true
+    done
+  fi
+}
 trap cleanup EXIT INT TERM
 
 # A stray server on either port would silently absorb this run's suites with

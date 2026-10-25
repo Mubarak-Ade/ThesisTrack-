@@ -65,7 +65,28 @@ type Envelope<T> =
 
 // ── Client ────────────────────────────────────────────────────────────
 
-export const client = axios.create({ baseURL: '/api/v1', withCredentials: true });
+/**
+ * Resolve the API base URL from the build-time environment.
+ *
+ * Same-origin by default (`/api/v1`): the Vite dev proxy and the Docker nginx
+ * both forward `/api` to the API, so localhost and the compose stack need no
+ * configuration. Split-origin deployments (web on Vercel, API on Render) set
+ * `VITE_API_URL` at BUILD time — no code edit per environment:
+ *
+ *   VITE_API_URL=https://thesistrack-api.onrender.com
+ *   → https://thesistrack-api.onrender.com/api/v1
+ *
+ * A trailing slash on the variable is tolerated (…/ → …/api/v1, not …//api/v1).
+ */
+export function resolveApiBaseUrl(raw?: string): string {
+  const origin = (raw ?? '').trim().replace(/\/+$/, '');
+  return origin ? `${origin}/api/v1` : '/api/v1';
+}
+
+export const client = axios.create({
+  baseURL: resolveApiBaseUrl(import.meta.env.VITE_API_URL),
+  withCredentials: true,
+});
 
 /** Normalize anything thrown by axios into an ApiError (spec §6). */
 export function normalizeError(error: unknown): ApiError {

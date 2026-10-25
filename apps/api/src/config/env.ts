@@ -19,9 +19,18 @@ export const env = cleanEnv(process.env, {
   ACTIVATION_TOKEN_TTL: num({ default: 259200 }), // 72 hours
   RESET_TOKEN_TTL: num({ default: 3600 }), // 1 hour
 
-  // Refresh cookie: HTTP-only, SameSite=Lax, path-scoped to /api/v1/auth.
-  // Set to true when serving over HTTPS.
+  // Refresh cookie: HTTP-only, path-scoped to /api/v1/auth. SameSite comes from
+  // COOKIE_SAME_SITE below so split-origin deployments can opt into `none`.
+  // Set COOKIE_SECURE to true when serving over HTTPS (required for `none`).
   COOKIE_SECURE: bool({ default: false }),
+  // SameSite policy for the refresh cookie (spec §18.4 delta, 2026-10-25):
+  //   lax    — default; same-site XHR (dev proxy, Docker nginx, custom
+  //            subdomains like app.example.com → api.example.com).
+  //   none   — REQUIRED when web and API are on different registrable domains
+  //            (e.g. Vercel + Render) so the browser sends the cookie
+  //            cross-site; requires COOKIE_SECURE=true.
+  //   strict — opt-in hardening; would also drop top-level entry navigation.
+  COOKIE_SAME_SITE: str({ choices: ['lax', 'strict', 'none'], default: 'lax' }),
   // Behind the §18.2 reverse proxy: trust X-Forwarded-* so logs, CORS and
   // rate limits see the real client IP. MUST be true in production (§18.4).
   TRUST_PROXY: bool({ default: false }),
@@ -70,3 +79,15 @@ export const env = cleanEnv(process.env, {
   SMTP_SECURE: bool({ default: false }),
   MAIL_FROM: str({ default: '' }),
 });
+
+// Cross-field guard (spec §18.4 delta, 2026-10-25): browsers silently discard a
+// `SameSite=None` cookie that is not `Secure`, so a split-origin deployment
+// would boot "fine" and then fail every refresh with no visible cause. Fail at
+// boot with an actionable message instead.
+if (env.COOKIE_SAME_SITE === 'none' && !env.COOKIE_SECURE) {
+  throw new Error(
+    'COOKIE_SAME_SITE=none requires COOKIE_SECURE=true — browsers drop insecure ' +
+      'SameSite=None cookies, which breaks the refresh flow (set COOKIE_SECURE=true ' +
+      'behind HTTPS, or use same-site subdomains with COOKIE_SAME_SITE=lax)',
+  );
+}

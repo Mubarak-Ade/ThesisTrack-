@@ -387,7 +387,12 @@ ck 'the row reports isDefault true' 'true' "$(f data.workflow.isDefault)"
 aal
 code=$(req GET "$BASE/workflows?limit=100" -H "Authorization: Bearer $AT")
 ck 'the flag shows on the list' 'true' "$(n "d.data.workflows.find(w=>w.id==='$SD').isDefault")"
-ck 'the previous holder cleared in the same write' 'false' "$(n "d.data.workflows.find(w=>w.id==='$ORIG_DEF').isDefault")"
+# By id, not via the paged list: once cleared, the previous holder sorts
+# alphabetically among every workflow and can fall off limit=100 when the test
+# DB has accumulated fixtures across runs (it does). The list assertion above
+# stays safe — the new default always sorts first (desc isDefault).
+code=$(req GET "$BASE/workflows/$ORIG_DEF" -H "Authorization: Bearer $AT")
+ck 'the previous holder cleared in the same write' 'false' "$(f data.workflow.isDefault)"
 
 aal
 code=$(req POST "$BASE/workflows" -H "Authorization: Bearer $AT" -H 'Content-Type: application/json' \
