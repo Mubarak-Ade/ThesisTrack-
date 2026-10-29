@@ -46,11 +46,12 @@ export BREVO_API_KEY=''
 
 if [ "${1:-}" = "--reset" ]; then
   bash scripts/test-db.sh reset
-  # Match CI's baseline (seed:admin → seed:workflows → seed:templates,
-  # .github/workflows/ci.yml). Without the workflow seed a fresh scratch DB has
-  # no §8.10 default definition, and the §16.3 set-default block has no
-  # "previous holder" to clear — a suite failure that says nothing about the
-  # product. Both seeds are idempotent.
+  # Match CI's baseline (seed:admin → seed:departments → seed:workflows →
+  # seed:templates, .github/workflows/ci.yml). Without the workflow seed a
+  # fresh scratch DB has no §8.10 default definition, and the §16.3 set-default
+  # block has no "previous holder" to clear — a suite failure that says nothing
+  # about the product. All seeds are idempotent.
+  npx tsx src/scripts/seed-departments.ts
   npx tsx src/scripts/seed-workflows.ts
   npx tsx src/scripts/seed-milestone-templates.ts
 fi

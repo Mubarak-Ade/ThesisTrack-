@@ -62,6 +62,10 @@ EOF
     ADMIN_EMAIL="${ADMIN_EMAIL:-admin@gmail.com}" \
     ADMIN_PASSWORD="${ADMIN_PASSWORD:-aim1234}" \
       npx tsx src/scripts/seed-admin.ts
+    # CI parity: departments → workflows → templates, all idempotent.
+    ADMIN_EMAIL="${ADMIN_EMAIL:-admin@gmail.com}" npx tsx src/scripts/seed-departments.ts
+    ADMIN_EMAIL="${ADMIN_EMAIL:-admin@gmail.com}" npx tsx src/scripts/seed-workflows.ts
+    npx tsx src/scripts/seed-milestone-templates.ts
     ;;
   *)
     echo "usage: bash scripts/test-db.sh {status|push|migrate|seed|reset}" >&2

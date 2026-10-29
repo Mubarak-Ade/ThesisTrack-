@@ -10,6 +10,8 @@ ADMIN_PASS="${ADMIN_PASS:-${ADMIN_PASSWORD:-AdminPass123!}}"
 NEW_STUDENT_PASS='StudentPass123!'
 RESET_PASS='ResetPass456!'
 STUDENT_EMAIL="student-$(date +%s)@test.local"
+# Students always carry a `FAC/YY/DEPT/NNNNN` number (design 2026-10-28).
+REG_NO="CST/22/SWE/$(node -pe 'String(Math.floor(Math.random()*100000)).padStart(5,"0")')"
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@thesistrack.local}"
 
 JAR_ADMIN=/tmp/opencode/tt-admin.txt
@@ -83,7 +85,7 @@ code=$(req POST "$BASE/auth/refresh" -b "$JAR_ADMIN");               ck 'refresh
 echo '== 2. Account provisioning: admin creates → INVITED → activate → ACTIVE =='
 
 code=$(req POST "$BASE/users" -H 'Content-Type: application/json' \
-  -d "{\"firstName\":\"New\",\"lastName\":\"Student\",\"email\":\"$STUDENT_EMAIL\",\"role\":\"student\"}")
+  -d "{\"firstName\":\"New\",\"lastName\":\"Student\",\"email\":\"$STUDENT_EMAIL\",\"role\":\"student\",\"registrationNumber\":\"$REG_NO\"}")
 ck 'provision without admin token' 401 "$code"
 
 code=$(req POST "$BASE/auth/login" -c "$JAR_ADMIN" -H 'Content-Type: application/json' \
@@ -93,14 +95,14 @@ AT_ADMIN=$(f data.accessToken)
 code=$(req GET "$BASE/users/nope" -H "Authorization: Bearer $AT_ADMIN") # keeps admin token warm
 
 code=$(req POST "$BASE/users" -H "Authorization: Bearer $AT_ADMIN" -H 'Content-Type: application/json' \
-  -d "{\"firstName\":\"New\",\"lastName\":\"Student\",\"email\":\"$STUDENT_EMAIL\",\"role\":\"student\"}")
+  -d "{\"firstName\":\"New\",\"lastName\":\"Student\",\"email\":\"$STUDENT_EMAIL\",\"role\":\"student\",\"registrationNumber\":\"$REG_NO\"}")
 ck 'admin provisions user' 201 "$code"
 ck 'user is INVITED' 'INVITED' "$(f data.status)"
 ACT_TOKEN1=$(f data.activationToken)
 
 # Re-inviting an INVITED account rotates the token (latest invitation wins)
 code=$(req POST "$BASE/users" -H "Authorization: Bearer $AT_ADMIN" -H 'Content-Type: application/json' \
-  -d "{\"firstName\":\"New\",\"lastName\":\"Student\",\"email\":\"$STUDENT_EMAIL\",\"role\":\"student\"}")
+  -d "{\"firstName\":\"New\",\"lastName\":\"Student\",\"email\":\"$STUDENT_EMAIL\",\"role\":\"student\",\"registrationNumber\":\"$REG_NO\"}")
 ck 're-invitation succeeds' 200 "$code"
 ck 'marked as reinvited' 'true' "$(f data.reinvited)"
 ACT_TOKEN=$(f data.activationToken)
@@ -117,7 +119,7 @@ ck 'preview status is invalid' 'invalid' "$(f data.status)"
 ck 'invalid preview carries no invitation' 'null' "$(f data.invitation)"
 
 code=$(req POST "$BASE/users" -H "Authorization: Bearer $AT_ADMIN" -H 'Content-Type: application/json' \
-  -d "{\"firstName\":\"Dup\",\"lastName\":\"User\",\"email\":\"$ADMIN_EMAIL\",\"role\":\"student\"}")
+  -d "{\"firstName\":\"Dup\",\"lastName\":\"User\",\"email\":\"$ADMIN_EMAIL\",\"role\":\"student\",\"registrationNumber\":\"CST/22/SWE/$(node -pe 'String(Math.floor(Math.random()*100000)).padStart(5,"0")')\"}")
 ck 'duplicate of ACTIVE account conflicts' 409 "$code"
 
 code=$(req POST "$BASE/auth/login" -H 'Content-Type: application/json' \

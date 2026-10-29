@@ -14,8 +14,8 @@
 #                supervisor revision_required → multipart version 2 →
 #                approved (tied milestone completes with completedAt) →
 #                rejected branch → immutable version download
-#   §5.9 Flow I  workflow config: create (+ duplicate-program 409), explicit
-#                workflowId project path, program-matched auto-advance at
+#   §5.9 Flow I  workflow config: create (+ duplicate-department 409), explicit
+#                workflowId project path, department-matched auto-advance at
 #                approval, gated advance → 422 unmet[] → 200 once satisfied,
 #                final stage clears the active row without touching
 #                project.status, whole-set definition edit leaves the
@@ -34,7 +34,10 @@ ADMIN_EMAIL="${ADMIN_EMAIL:-admin@thesistrack.local}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-AdminPass123!}"
 STAMP=$(date +%s)
 SHARED_PASS='FlowSuite123!'
-PROG="Flow Program $STAMP"
+# Managed department (design 2026-10-28): ADR-16's match key is this FK, and
+# every student needs a `FAC/YY/DEPT/NNNNN` number whose DEPT segment matches.
+DEP_CODE=$(node -pe "Array.from({length:3},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random()*24)]).join('')")
+REG5() { node -pe 'String(Math.floor(Math.random()*100000)).padStart(5,"0")'; }
 
 rm -f "$BODY"
 
@@ -73,12 +76,15 @@ tok() { # email → fresh access token for a fixture account
   f data.accessToken
 }
 
-mkuser() { # $1 = email suffix, $2 = role, $3 = program (or empty) → "id|email"
+mkuser() { # $1 = email suffix, $2 = role, $3 = departmentId (students only) → "id|email"
   local email="wf-$1-$STAMP@thesistrack.test"
-  local prog=''
-  [ -n "$3" ] && prog=",\"program\":\"$3\""   # §11.0.2 delta — HTTP write path
+  local extra=''
+  if [ "$2" = "student" ]; then
+    extra=",\"registrationNumber\":\"CST/22/$DEP_CODE/$(REG5)\""   # design 2026-10-28
+    [ -n "${3:-}" ] && extra="$extra,\"departmentId\":\"$3\""
+  fi
   req POST "$BASE/users" -H "Authorization: Bearer $AT" -H 'Content-Type: application/json' \
-    -d "{\"firstName\":\"Flow\",\"lastName\":\"Suite\",\"email\":\"$email\",\"role\":\"$2\"$prog}" >/dev/null
+    -d "{\"firstName\":\"Flow\",\"lastName\":\"Suite\",\"email\":\"$email\",\"role\":\"$2\"$extra}" >/dev/null
   local token; token=$(f data.activationToken)
   req POST "$BASE/auth/activate" -H 'Content-Type: application/json' \
     -d "{\"token\":\"$token\",\"password\":\"$SHARED_PASS\"}" >/dev/null
@@ -95,7 +101,13 @@ ck 'milestone template created (the §5.4 selection, §8.5)' 201 "$code"
 TPL=$(f data.template.id)
 
 aal
-read -r SID SEMAIL <<<"$(mkuser stu student "$PROG" | tr '|' ' ')"
+code=$(req POST "$BASE/departments" -H "Authorization: Bearer $AT" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Flow Dept $STAMP\",\"code\":\"$DEP_CODE\"}")
+ck 'department created for the ADR-16 match (§3.4)' 201 "$code"
+DEP_ID=$(f data.department.id)
+
+aal
+read -r SID SEMAIL <<<"$(mkuser stu student "$DEP_ID" | tr '|' ' ')"
 read -r SUPID SUPEMAIL <<<"$(mkuser sup supervisor '' | tr '|' ' ')"
 ck 'student + supervisor provisioned and activated' 1 "$([ -n "$SID" ] && [ -n "$SUPID" ] && [ "${#SID}" = 36 ] && [ "${#SUPID}" = 36 ] && echo 1 || echo 0)"
 
@@ -106,14 +118,14 @@ ck 'admin assigns the supervisor first (§5.4 head — before any proposal)' 201
 
 aal
 code=$(req POST "$BASE/workflows" -H "Authorization: Bearer $AT" -H 'Content-Type: application/json' \
-  -d "{\"name\":\"Flow Suite WF $STAMP\",\"program\":\"$PROG\",\"stages\":[{\"name\":\"Proposal approval\",\"requiresApproval\":true},{\"name\":\"Write-up review\",\"requiresSubmission\":true,\"requiresReview\":true},{\"name\":\"Defence\"}]}")
+  -d "{\"name\":\"Flow Suite WF $STAMP\",\"departmentId\":\"$DEP_ID\",\"stages\":[{\"name\":\"Proposal approval\",\"requiresApproval\":true},{\"name\":\"Write-up review\",\"requiresSubmission\":true,\"requiresReview\":true},{\"name\":\"Defence\"}]}")
 ck 'workflow created with three stages' 201 "$code"
 W=$(f data.workflow.id)
 
 aal
 code=$(req POST "$BASE/workflows" -H "Authorization: Bearer $AT" -H 'Content-Type: application/json' \
-  -d "{\"name\":\"Flow Suite WF dup $STAMP\",\"program\":\"$PROG\"}")
-ck 'second active workflow for the same program → 409 (§8.10)' 409 "$code"
+  -d "{\"name\":\"Flow Suite WF dup $STAMP\",\"departmentId\":\"$DEP_ID\"}")
+ck 'second active workflow for the same department → 409 (§8.10)' 409 "$code"
 ck 'conflict carries RESOURCE_CONFLICT' 'RESOURCE_CONFLICT' "$(f error.code)"
 
 echo
@@ -172,7 +184,7 @@ ck 'step 2: proposal.project_id set' "$PRJ" "$(f data.proposal.projectId)"
 aal
 code=$(req GET "$BASE/projects/$PRJ" -H "Authorization: Bearer $AT")
 ck 'step 1: project row is active' 'active' "$(f data.project.status)"
-ck 'ADR-16: matched the program workflow' "$W" "$(f data.project.workflowId)"
+ck 'ADR-16: matched the department workflow' "$W" "$(f data.project.workflowId)"
 
 code=$(req GET "$BASE/projects/$PRJ/milestones" -H "Authorization: Bearer $STOK")
 ck 'step 4: milestones materialised from the chosen template' '2' "$(n 'd.data.milestones.length')"
@@ -373,7 +385,7 @@ ORIG_DEF=$(n "d.data.workflows.find(w=>w.isDefault===true).id")
 
 aal
 code=$(req POST "$BASE/workflows" -H "Authorization: Bearer $AT" -H 'Content-Type: application/json' \
-  -d "{\"name\":\"SetDefault WF $STAMP\",\"program\":\"SetDef Prog $STAMP\",\"stages\":[{\"name\":\"One\"}]}")
+  -d "{\"name\":\"SetDefault WF $STAMP\",\"departmentId\":null,\"stages\":[{\"name\":\"One\"}]}")
 ck 'set-default fixture workflow created → 201' 201 "$code"
 SD=$(f data.workflow.id)
 ck 'POST never steals the flag (§8.10)' 'false' "$(f data.workflow.isDefault)"
@@ -396,7 +408,7 @@ ck 'the previous holder cleared in the same write' 'false' "$(f data.workflow.is
 
 aal
 code=$(req POST "$BASE/workflows" -H "Authorization: Bearer $AT" -H 'Content-Type: application/json' \
-  -d "{\"name\":\"SetDefault archived $STAMP\",\"program\":\"SetDef Arch $STAMP\",\"stages\":[]}")
+  -d "{\"name\":\"SetDefault archived $STAMP\",\"departmentId\":null,\"stages\":[]}")
 SD2=$(f data.workflow.id)
 code=$(req PATCH "$BASE/workflows/$SD2" -H "Authorization: Bearer $AT" -H 'Content-Type: application/json' \
   -d '{"archived":true}')

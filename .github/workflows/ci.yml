@@ -71,9 +71,10 @@ jobs:
       - name: Authorization selftest
         run: pnpm --filter @thesistrack/api authz:selftest
 
-      - name: Seed baseline (admin, workflows, milestone templates)
+      - name: Seed baseline (admin, departments, workflows, milestone templates)
         run: |
           pnpm --filter @thesistrack/api seed:admin
+          pnpm --filter @thesistrack/api seed:departments
           pnpm --filter @thesistrack/api seed:workflows
           pnpm --filter @thesistrack/api seed:templates
 

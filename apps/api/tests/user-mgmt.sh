@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # System test: admin directory end-to-end (spec §11.0.2, §5.1, §5.2).
 #   list/search/filter/paginate · detail · patch (incl. activate/deactivate
-#   guardrails, the §11.0.2 `program` delta) · resend invitation ·
-#   all-or-nothing bulk import
+#   guardrails) · resend invitation · all-or-nothing bulk import ·
+#   managed departments + registration-number rules (design 2026-10-28)
 # Requires a running server (ACCESS_TOKEN_TTL=3 recommended) and seeded admin.
 set -u
 
@@ -50,10 +50,26 @@ adm() { login "$ADMIN_EMAIL" "$ADMIN_PASSWORD"; }
 
 RANDOM_UUID() { node -pe 'crypto.randomUUID()'; }
 
-echo '== 0. Fixtures: create + activate a student, create an INVITED user =='
+# A five-digit suffix for registration numbers — unique enough per run.
+REG5() { node -pe 'String(Math.floor(Math.random()*100000)).padStart(5,"0")'; }
+
+# Three letters, all valid department-code characters (no I/O confusion).
+DEP_CODE=$(node -pe "Array.from({length:3},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random()*24)]).join('')")
+DEP_NAME="Umgmt Dept $STAMP"
+REG_STUDENT="CST/22/$DEP_CODE/$(REG5)"
+REG_PATCH="CST/22/$DEP_CODE/$(REG5)"
+REG_NEW="CST/22/$DEP_CODE/$(REG5)"
+
+echo '== 0. Fixtures: a department, an activated student, an INVITED user =='
+T=$(adm)
+code=$(req POST "$BASE/departments" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"$DEP_NAME\",\"code\":\"$DEP_CODE\"}")
+ck 'create fixture department → 201' 201 "$code"
+DEP_ID=$(f data.department.id)
+
 T=$(adm)
 code=$(req POST "$BASE/users" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
-  -d "{\"firstName\":\"Umgmt\",\"lastName\":\"Student\",\"email\":\"$STUDENT_EMAIL\",\"role\":\"student\"}")
+  -d "{\"firstName\":\"Umgmt\",\"lastName\":\"Student\",\"email\":\"$STUDENT_EMAIL\",\"role\":\"student\",\"registrationNumber\":\"$REG_STUDENT\",\"departmentId\":\"$DEP_ID\"}")
 ck 'provision student → 201' 201 "$code"
 ST_TOKEN=$(f data.activationToken)
 
@@ -66,7 +82,7 @@ ck 'activated user reports ACTIVE' 'ACTIVE' "$ST_STATUS"
 
 T=$(adm)
 code=$(req POST "$BASE/users" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
-  -d "{\"firstName\":\"Patch\",\"lastName\":\"Target\",\"email\":\"$PATCH_EMAIL\",\"role\":\"student\"}")
+  -d "{\"firstName\":\"Patch\",\"lastName\":\"Target\",\"email\":\"$PATCH_EMAIL\",\"role\":\"student\",\"registrationNumber\":\"$REG_PATCH\",\"departmentId\":\"$DEP_ID\"}")
 ck 'provision patch target → 201' 201 "$code"
 PATCH_ID=$(f data.user.id)
 PATCH_TOKEN=$(f data.activationToken)
@@ -137,10 +153,10 @@ ck 'student patch → 403' 403 "$code"
 T=$(adm)
 code=$(req PATCH "$BASE/users/$PATCH_ID" -H "Authorization: Bearer $T" \
   -H 'Content-Type: application/json' \
-  -d '{"firstName":"Renamed","registrationNumber":"REG-001"}')
+  -d "{\"firstName\":\"Renamed\",\"registrationNumber\":\"$REG_NEW\"}")
 ck 'admin patch → 200' 200 "$code"
 ck 'firstName updated' 'Renamed' "$(f data.user.firstName)"
-ck 'registrationNumber set' 'REG-001' "$(f data.user.registrationNumber)"
+ck 'registrationNumber set (upper-cased)' "$REG_NEW" "$(f data.user.registrationNumber)"
 ck 'still INVITED' 'INVITED' "$(f data.user.status)"
 
 T=$(adm)
@@ -286,7 +302,7 @@ ck 'student import → 403' 403 "$code"
 IMPORT_BODY=/tmp/opencode/tt-umgmt-import.json
 cat > "$IMPORT_BODY" <<JSON
 {"users":[
-  {"firstName":"Imp","lastName":"One","email":"$IMPORT_1","role":"student"},
+  {"firstName":"Imp","lastName":"One","email":"$IMPORT_1","role":"student","registrationNumber":"CST/22/$DEP_CODE/$(REG5)","departmentId":"$DEP_ID"},
   {"firstName":"Imp","lastName":"Two","email":"$IMPORT_2","role":"supervisor"}
 ]}
 JSON
@@ -305,8 +321,8 @@ STALE_EMAIL="umgmt-stale-$STAMP@test.local"
 CONFLICT_BODY=/tmp/opencode/tt-umgmt-conflict.json
 cat > "$CONFLICT_BODY" <<JSON
 {"users":[
-  {"firstName":"Fresh","lastName":"Row","email":"$STALE_EMAIL","role":"student"},
-  {"firstName":"Dup","lastName":"Row","email":"$IMPORT_1","role":"student"}
+  {"firstName":"Fresh","lastName":"Row","email":"$STALE_EMAIL","role":"student","registrationNumber":"CST/22/$DEP_CODE/$(REG5)","departmentId":"$DEP_ID"},
+  {"firstName":"Dup","lastName":"Row","email":"$IMPORT_1","role":"student","registrationNumber":"CST/22/$DEP_CODE/$(REG5)","departmentId":"$DEP_ID"}
 ]}
 JSON
 T=$(adm)
@@ -323,13 +339,13 @@ ck 'all-or-nothing: nothing inserted' '0' "$(f data.users.length)"
 DUP_EMAIL="umgmt-dup-$STAMP@test.local"
 T=$(adm)
 code=$(req POST "$BASE/users/import" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
-  -d "{\"users\":[{\"firstName\":\"A\",\"lastName\":\"B\",\"email\":\"$DUP_EMAIL\"},{\"firstName\":\"C\",\"lastName\":\"D\",\"email\":\"$DUP_EMAIL\"}]}")
+  -d "{\"users\":[{\"firstName\":\"A\",\"lastName\":\"B\",\"email\":\"$DUP_EMAIL\",\"role\":\"supervisor\"},{\"firstName\":\"C\",\"lastName\":\"D\",\"email\":\"$DUP_EMAIL\",\"role\":\"supervisor\"}]}")
 ck 'duplicate within batch → 422' 422 "$code"
 ck 'duplicate message' 'Duplicate email in this batch' "$(f 'error.details[0].message')"
 
 T=$(adm)
 code=$(req POST "$BASE/users/import" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
-  -d '{"users":[{"firstName":"Good","lastName":"Row","email":"umgmt-good-'$STAMP'@test.local"},{"firstName":"Bad","email":"not-an-email"}]}')
+  -d '{"users":[{"firstName":"Good","lastName":"Row","email":"umgmt-good-'$STAMP'@test.local","role":"supervisor"},{"firstName":"Bad","email":"not-an-email"}]}')
 ck 'row shape error → 400' 400 "$code"
 ck 'shape error code' 'VALIDATION_ERROR' "$(f error.code)"
 ck 'names every bad row' 'true' "$(f "error.details.some(d=>d.path==='users.1.email')")"
@@ -354,29 +370,133 @@ code=$(req POST "$BASE/auth/login" -H 'Content-Type: application/json' \
   -d "{\"email\":\"$IMPORT_1\",\"password\":\"$NEW_PASS\"}")
 ck 'imported user signs in' 200 "$code"
 
-echo '== 6. PATCH program: the §11.0.2 PROPOSED delta (ADR-16 write path) =='
+echo '== 6. Managed departments + registration-number rules (design 2026-10-28) =='
 
-T=$(adm)
-code=$(req PATCH "$BASE/users/$PATCH_ID" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
-  -d '{"program":"Data Science"}')
-ck 'PATCH {program} → 200' 200 "$code"
-ck 'program echoed in the user view' 'Data Science' "$(f data.user.program)"
+# — the list is readable by everyone authenticated; writes are admin-only —
+ST=$(login "$STUDENT_EMAIL" "$NEW_PASS")
+code=$(req GET "$BASE/departments" -H "Authorization: Bearer $ST")
+ck 'any authenticated account reads the list' 200 "$code"
+ck 'the fixture department is listed' "$DEP_ID" "$(f "data.departments.find(d=>d.id==='$DEP_ID').id")"
+code=$(req GET "$BASE/departments?includeArchived=true" -H "Authorization: Bearer $ST")
+ck 'student may not list archived rows → 403' 403 "$code"
+code=$(req POST "$BASE/departments" -H "Authorization: Bearer $ST" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Nope $STAMP\",\"code\":\"ZZZ\"}")
+ck 'student may not create → 403' 403 "$code"
 
+# — duplicates among ACTIVE rows are 409; the shape is validated (400) —
 T=$(adm)
-code=$(req GET "$BASE/users/$PATCH_ID" -H "Authorization: Bearer $T")
-ck 'detail carries the program' 'Data Science' "$(f data.user.program)"
+code=$(req POST "$BASE/departments" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"$DEP_NAME\",\"code\":\"QQX\"}")
+ck 'duplicate active name → 409' 409 "$code"
+ck '409 code' 'RESOURCE_CONFLICT' "$(f error.code)"
+T=$(adm)
+code=$(req POST "$BASE/departments" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Umgmt Other $STAMP\",\"code\":\"$DEP_CODE\"}")
+ck 'duplicate active code → 409' 409 "$code"
+T=$(adm)
+code=$(req POST "$BASE/departments" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Umgmt Bad $STAMP\",\"code\":\"toolong\"}")
+ck 'malformed code → 400' 400 "$code"
 
+# — the user view carries the nested department; the filters work —
 T=$(adm)
-code=$(req PATCH "$BASE/users/$PATCH_ID" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
-  -d '{"program":null}')
-ck 'PATCH {program:null} clears it (NULL = unaffiliated)' 200 "$code"
-ck 'program cleared' 'null' "$(f data.user.program)"
+code=$(req GET "$BASE/users/$ST_ID" -H "Authorization: Bearer $T")
+ck 'detail carries the nested department' "$DEP_ID" "$(f data.user.department.id)"
+ck 'department carries its code' "$DEP_CODE" "$(f data.user.department.code)"
+ck 'no legacy free-text program' 'undefined' "$(f data.user.program)"
+T=$(adm)
+code=$(req GET "$BASE/users?departmentId=$DEP_ID&limit=100" -H "Authorization: Bearer $T")
+ck '?departmentId filters to that department' 'true' "$(f "data.users.every(u=>!u.department||u.department.id==='$DEP_ID')")"
+
+# — registration numbers: required + shaped for students —
+T=$(adm)
+code=$(req POST "$BASE/users" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"firstName\":\"No\",\"lastName\":\"Number\",\"email\":\"umgmt-nonum-$STAMP@test.local\",\"role\":\"student\",\"departmentId\":\"$DEP_ID\"}")
+ck 'student without a number → 400' 400 "$code"
+ck '400 points at registrationNumber' 'true' "$(f "error.details.some(d=>d.path==='registrationNumber')")"
 
 T=$(adm)
 code=$(req POST "$BASE/users" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
-  -d "{\"firstName\":\"Prog\",\"lastName\":\"Ram\",\"email\":\"umgmt-prog-$STAMP@test.local\",\"role\":\"student\",\"program\":\"Software Engineering\"}")
-ck 'POST /users accepts program → 201' 201 "$code"
-ck 'create echoes the program' 'Software Engineering' "$(f data.user.program)"
+  -d "{\"firstName\":\"Bad\",\"lastName\":\"Number\",\"email\":\"umgmt-badnum-$STAMP@test.local\",\"role\":\"student\",\"registrationNumber\":\"SWE/22/00825\"}")
+ck 'malformed number → 400' 400 "$code"
+
+# A guaranteed-different DEPT segment, same valid shape.
+MIS_CODE="${DEP_CODE:0:2}$([ "${DEP_CODE:2:1}" = "X" ] && echo "Y" || echo "X")"
+T=$(adm)
+code=$(req POST "$BASE/users" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"firstName\":\"Mis\",\"lastName\":\"Match\",\"email\":\"umgmt-mis-$STAMP@test.local\",\"role\":\"student\",\"registrationNumber\":\"CST/22/$MIS_CODE/$(REG5)\",\"departmentId\":\"$DEP_ID\"}")
+ck 'DEPT segment mismatch → 422' 422 "$code"
+ck '422 code' 'BUSINESS_RULE_VIOLATION' "$(f error.code)"
+
+DUP_REG="CST/22/$DEP_CODE/$(REG5)"
+T=$(adm)
+code=$(req POST "$BASE/users" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"firstName\":\"Dupe\",\"lastName\":\"Reg\",\"email\":\"umgmt-dupe-a-$STAMP@test.local\",\"role\":\"student\",\"registrationNumber\":\"$DUP_REG\",\"departmentId\":\"$DEP_ID\"}")
+ck 'first holder of the number → 201' 201 "$code"
+T=$(adm)
+code=$(req POST "$BASE/users" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"firstName\":\"Dupe\",\"lastName\":\"Reg\",\"email\":\"umgmt-dupe-b-$STAMP@test.local\",\"role\":\"student\",\"registrationNumber\":\"$(echo "$DUP_REG" | tr 'A-Z' 'a-z')\"}")
+ck 'duplicate number, case-insensitive → 409' 409 "$code"
+
+# — supervisors: a number is optional and may take any shape —
+T=$(adm)
+code=$(req POST "$BASE/users" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"firstName\":\"Sup\",\"lastName\":\"NoNum\",\"email\":\"umgmt-sup-a-$STAMP@test.local\",\"role\":\"supervisor\"}")
+ck 'supervisor without a number → 201' 201 "$code"
+SUP_ID=$(f data.user.id)
+T=$(adm)
+code=$(req POST "$BASE/users" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"firstName\":\"Sup\",\"lastName\":\"Staff\",\"email\":\"umgmt-sup-b-$STAMP@test.local\",\"role\":\"supervisor\",\"registrationNumber\":\"staff-$STAMP\"}")
+ck 'supervisor with a staff number → 201' 201 "$code"
+ck 'staff number is upper-cased' "STAFF-$STAMP" "$(f data.user.registrationNumber)"
+
+# — a student's number can never be cleared; promotion needs one —
+T=$(adm)
+code=$(req PATCH "$BASE/users/$ST_ID" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d '{"registrationNumber":null}')
+ck 'clearing a student number → 422' 422 "$code"
+ck '422 code' 'BUSINESS_RULE_VIOLATION' "$(f error.code)"
+T=$(adm)
+code=$(req PATCH "$BASE/users/$SUP_ID" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d '{"role":"student"}')
+ck 'promote to student without a number → 422' 422 "$code"
+T=$(adm)
+code=$(req PATCH "$BASE/users/$SUP_ID" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"role\":\"student\",\"registrationNumber\":\"CST/22/$DEP_CODE/$(REG5)\",\"departmentId\":\"$DEP_ID\"}")
+ck 'promote with a valid number → 200' 200 "$code"
+
+# — the grandfathering banner lists students missing a number only —
+T=$(adm)
+code=$(req GET "$BASE/users?missingRegistrationNumber=true&limit=100" -H "Authorization: Bearer $T")
+ck 'missing-number view → 200' 200 "$code"
+ck 'lists students only' 'true' "$(f "data.users.every(u=>u.role==='student')")"
+code=$(req GET "$BASE/users?missingRegistrationNumber=true" -H "Authorization: Bearer $ST")
+ck 'student may not use the admin view → 403' 403 "$code"
+
+# — archiving is refused while an ACTIVE workflow holds the department —
+T=$(adm)
+code=$(req POST "$BASE/workflows" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Umgmt Flow $STAMP\",\"departmentId\":\"$DEP_ID\",\"stages\":[]}")
+ck 'workflow for the fixture department → 201' 201 "$code"
+FLOW_ID=$(f data.workflow.id)
+T=$(adm)
+code=$(req PATCH "$BASE/departments/$DEP_ID" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d '{"archived":true}')
+ck 'archive refused while a workflow holds it → 409' 409 "$code"
+T=$(adm)
+code=$(req PATCH "$BASE/workflows/$FLOW_ID" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d '{"archived":true}')
+ck 'archive the workflow → 200' 200 "$code"
+T=$(adm)
+code=$(req PATCH "$BASE/departments/$DEP_ID" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d '{"archived":true}')
+ck 'archive the department → 200' 200 "$code"
+ck 'archived flag echoed' 'true' "$(f data.department.archived)"
+T=$(adm)
+code=$(req PATCH "$BASE/departments/$DEP_ID" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d '{"archived":false}')
+ck 'reactivate the department → 200' 200 "$code"
+ck 'active again' 'false' "$(f data.department.archived)"
 
 echo
 echo "==================================="

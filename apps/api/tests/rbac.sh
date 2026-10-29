@@ -77,7 +77,7 @@ code=$(req GET "$BASE/projects/not-a-uuid" -H "Authorization: Bearer $T"); ck 'm
 
 echo '== RBAC layer: POST /users (administrator only) =='
 TMP_EMAIL="rbac-admin-probe-$(date +%s)@test.local"
-body="{\"firstName\":\"P\",\"lastName\":\"Probe\",\"email\":\"$TMP_EMAIL\",\"role\":\"student\"}"
+body="{\"firstName\":\"P\",\"lastName\":\"Probe\",\"email\":\"$TMP_EMAIL\",\"role\":\"student\",\"registrationNumber\":\"CST/22/SWE/$(node -pe 'String(Math.floor(Math.random()*100000)).padStart(5,"0")')\"}"
 
 T=$(login "$OTH" "$PW")
 code=$(req POST "$BASE/users" -H "Authorization: Bearer $T" -H 'Content-Type: application/json' -d "$body")
