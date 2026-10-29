@@ -32,7 +32,7 @@ export function findSubmissionById(id: string): Promise<SubmissionRow | undefine
 export function findSubmissionDetailById(id: string): Promise<SubmissionWithSubmitter | undefined> {
   return db.query.submissions.findFirst({
     where: eq(submissions.id, id),
-    with: { submitter: true },
+    with: { submitter: { with: { department: true } } },
   });
 }
 
@@ -66,7 +66,7 @@ export async function listSubmissions(
   return db.query.submissions.findMany({
     where: and(...conditions),
     orderBy: [desc(submissions.createdAt), desc(submissions.id)],
-    with: { submitter: true },
+    with: { submitter: { with: { department: true } } },
   });
 }
 

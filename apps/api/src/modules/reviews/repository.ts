@@ -1,9 +1,9 @@
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 
 import { db } from '../../config/db.js';
-import { milestones, reviews, submissions, users } from '../../schema/index.js';
+import { departments, milestones, reviews, submissions, users } from '../../schema/index.js';
 import type { SubmissionRow, SubmissionStatus } from '../submissions/types.js';
-import type { UserRow } from '../users/types.js';
+import type { UserWithDepartment } from '../users/types.js';
 import type { ReviewDecision, ReviewRow, ReviewWithReviewer } from './types.js';
 
 /**
@@ -24,7 +24,7 @@ export type WriteExecutor = Pick<typeof db, 'select' | 'insert' | 'update' | 'de
 export function listReviewsForSubmission(submissionId: string): Promise<ReviewWithReviewer[]> {
   return db.query.reviews.findMany({
     where: eq(reviews.submissionId, submissionId),
-    with: { reviewer: true },
+    with: { reviewer: { with: { department: true } } },
     orderBy: [desc(reviews.createdAt), desc(reviews.id)],
   });
 }
@@ -34,16 +34,31 @@ export function listReviewsForSubmission(submissionId: string): Promise<ReviewWi
  * submissions (§11.6 "cross-submission history"). Proposal reviews hang off
  * `proposals` instead (§11.3's own list) and are deliberately out of scope.
  */
-export function listReviewsForProject(
+export async function listReviewsForProject(
   projectId: string,
-): Promise<Array<{ review: ReviewRow; submission: SubmissionRow; reviewer: UserRow }>> {
-  return db
-    .select({ review: reviews, submission: submissions, reviewer: users })
+): Promise<
+  Array<{ review: ReviewRow; submission: SubmissionRow; reviewer: UserWithDepartment }>
+> {
+  const rows = await db
+    .select({
+      review: reviews,
+      submission: submissions,
+      reviewer: users,
+      reviewerDepartment: departments,
+    })
     .from(reviews)
     .innerJoin(submissions, eq(reviews.submissionId, submissions.id))
     .innerJoin(users, eq(reviews.reviewerId, users.id))
+    .leftJoin(departments, eq(users.departmentId, departments.id))
     .where(eq(submissions.projectId, projectId))
     .orderBy(desc(reviews.createdAt), desc(reviews.id));
+
+  // The explicit join selects the raw tables, so the reviewer's department is
+  // attached here — the same shape every user view carries (design 2026-10-28).
+  return rows.map(({ reviewerDepartment, ...row }) => ({
+    ...row,
+    reviewer: { ...row.reviewer, department: reviewerDepartment ?? null },
+  }));
 }
 
 /* ----------------------------------------------------------------- writes */

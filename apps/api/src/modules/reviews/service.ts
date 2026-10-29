@@ -6,7 +6,7 @@ import { getSubmissionDetail } from '../submissions/service.js';
 import type { SubmissionRow, SubmissionStatus, SubmissionView } from '../submissions/types.js';
 import { findActiveSupervisorIdForStudent } from '../supervisor-assignments/service.js';
 import { findUserById, toPublicUser } from '../users/service.js';
-import type { UserRow } from '../users/types.js';
+import type { UserWithDepartment } from '../users/types.js';
 import type { CreateReviewInput } from './schema.js';
 import * as repo from './repository.js';
 import type {
@@ -40,7 +40,9 @@ function reviewRefusal(status: SubmissionStatus): BusinessRuleError {
   ]);
 }
 
-function toReviewView(row: ReviewWithReviewer | (ReviewRow & { reviewer: UserRow })): ReviewView {
+function toReviewView(
+  row: ReviewWithReviewer | (ReviewRow & { reviewer: UserWithDepartment }),
+): ReviewView {
   return {
     id: row.id,
     proposalId: row.proposalId,

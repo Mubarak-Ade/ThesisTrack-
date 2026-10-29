@@ -2,7 +2,7 @@ import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 
 import { db } from '../../config/db.js';
 import { supervisorAssignments } from '../../schema/index.js';
-import type { UserRow } from '../users/types.js';
+import type { UserWithDepartment } from '../users/types.js';
 import type { AssignmentWithSupervisor, SupervisorAssignmentRow } from './types.js';
 
 /**
@@ -66,14 +66,14 @@ export async function findActiveAssignmentForStudentSupervisor(
  */
 export async function listActiveAssignmentsForSupervisor(
   supervisorId: string,
-): Promise<Array<SupervisorAssignmentRow & { student: UserRow }>> {
+): Promise<Array<SupervisorAssignmentRow & { student: UserWithDepartment }>> {
   return db.query.supervisorAssignments.findMany({
     where: and(
       eq(supervisorAssignments.supervisorId, supervisorId),
       isNull(supervisorAssignments.endedAt),
     ),
     orderBy: [desc(supervisorAssignments.assignedAt)],
-    with: { student: true },
+    with: { student: { with: { department: true } } },
   });
 }
 
@@ -86,7 +86,7 @@ export async function findActiveAssignmentDetailForStudent(
       eq(supervisorAssignments.studentId, studentId),
       isNull(supervisorAssignments.endedAt),
     ),
-    with: { supervisor: true },
+    with: { supervisor: { with: { department: true } } },
   });
 }
 
@@ -100,7 +100,7 @@ export async function listEndedAssignmentsForStudent(
       isNotNull(supervisorAssignments.endedAt),
     ),
     orderBy: [desc(supervisorAssignments.assignedAt), desc(supervisorAssignments.id)],
-    with: { supervisor: true },
+    with: { supervisor: { with: { department: true } } },
   });
 }
 
@@ -113,7 +113,7 @@ export async function findActiveAssignmentDetail(
       eq(supervisorAssignments.projectId, projectId),
       isNull(supervisorAssignments.endedAt),
     ),
-    with: { supervisor: true },
+    with: { supervisor: { with: { department: true } } },
   });
 }
 
@@ -125,7 +125,7 @@ export async function listEndedAssignments(projectId: string): Promise<Assignmen
       isNotNull(supervisorAssignments.endedAt),
     ),
     orderBy: [desc(supervisorAssignments.assignedAt), desc(supervisorAssignments.id)],
-    with: { supervisor: true },
+    with: { supervisor: { with: { department: true } } },
   });
 }
 

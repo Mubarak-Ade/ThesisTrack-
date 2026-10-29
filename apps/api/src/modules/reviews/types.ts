@@ -1,13 +1,13 @@
 import type { reviews } from '../../schema/index.js';
 import type { SubmissionRow, SubmissionStatus } from '../submissions/types.js';
-import type { PublicUser, UserRow } from '../users/types.js';
+import type { PublicUser, UserWithDepartment } from '../users/types.js';
 
 export type ReviewRow = typeof reviews.$inferSelect;
 export type ReviewDecision = ReviewRow['decision'];
 
 /** Row joined with its reviewer — every read response carries the PublicUser. */
 export interface ReviewWithReviewer extends ReviewRow {
-  reviewer: UserRow;
+  reviewer: UserWithDepartment;
 }
 
 /**

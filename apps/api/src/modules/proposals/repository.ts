@@ -11,7 +11,7 @@ import {
   reviews,
   supervisorAssignments,
 } from '../../schema/index.js';
-import type { UserRow } from '../users/types.js';
+import type { UserWithDepartment } from '../users/types.js';
 import type { ProjectRow } from '../projects/types.js';
 import type {
   MilestoneTemplateRow,
@@ -44,7 +44,7 @@ export function findProposalById(id: string): Promise<ProposalRow | undefined> {
 export function findProposalDetailById(id: string): Promise<ProposalWithStudent | undefined> {
   return db.query.proposals.findFirst({
     where: eq(proposals.id, id),
-    with: { student: true },
+    with: { student: { with: { department: true } } },
   });
 }
 
@@ -82,7 +82,7 @@ export async function listProposals(
       orderBy: [desc(proposals.createdAt), desc(proposals.id)],
       limit: filters.limit,
       offset: (filters.page - 1) * filters.limit,
-      with: { student: true },
+      with: { student: { with: { department: true } } },
     }),
     db.select({ total: sql<string>`count(*)` }).from(proposals).where(where),
   ]);
@@ -151,11 +151,11 @@ export async function countAttachments(proposalId: string): Promise<number> {
 /** Append-only review history, newest first (§11.3, §12 I8). */
 export function listReviews(
   proposalId: string,
-): Promise<Array<ReviewRow & { reviewer: UserRow }>> {
+): Promise<Array<ReviewRow & { reviewer: UserWithDepartment }>> {
   return db.query.reviews.findMany({
     where: eq(reviews.proposalId, proposalId),
     orderBy: [desc(reviews.createdAt), desc(reviews.id)],
-    with: { reviewer: true },
+    with: { reviewer: { with: { department: true } } },
   });
 }
 

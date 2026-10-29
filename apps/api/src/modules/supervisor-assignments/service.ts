@@ -11,7 +11,7 @@ import { getProjectById } from '../projects/service.js';
 import { findUserById, toPublicUser } from '../users/service.js';
 import { projects } from '../../schema/index.js';
 import type { ProjectRow } from '../projects/types.js';
-import type { UserRow } from '../users/types.js';
+import type { UserWithDepartment } from '../users/types.js';
 import {
   endAssignment,
   findActiveAssignment,
@@ -61,7 +61,7 @@ export function getActiveAssignmentForStudent(
 
 function toView(
   row: SupervisorAssignmentRow,
-  supervisor: UserRow,
+  supervisor: UserWithDepartment,
 ): AssignmentView {
   return {
     id: row.id,
@@ -157,7 +157,7 @@ async function loadActiveProject(projectId: string): Promise<ProjectRow> {
  * resource at an id belonging to a supervisor. This keeps the read guard and
  * the write path answering identically for the same id.
  */
-async function loadStudent(studentId: string): Promise<UserRow> {
+async function loadStudent(studentId: string): Promise<UserWithDepartment> {
   const user = await findUserById(studentId);
   if (!user || user.role !== 'student') {
     throw new NotFoundError('Student');
@@ -186,7 +186,9 @@ async function resolveProjectForStudent(studentId: string): Promise<string | nul
  *   wrong role       → 422 (business rule, not a shape problem)
  *   deactivated user → 422 (cannot start a relationship with an inactive account)
  */
-async function validateTargetSupervisor(supervisorId: string): Promise<UserRow> {
+async function validateTargetSupervisor(
+  supervisorId: string,
+): Promise<UserWithDepartment> {
   const user = await findUserById(supervisorId);
   if (!user) {
     throw new ValidationError('Invalid supervisor', [

@@ -1,5 +1,5 @@
 import type { milestoneTemplates, proposalAttachments, proposals, reviews } from '../../schema/index.js';
-import type { PublicUser, UserRow } from '../users/types.js';
+import type { PublicUser, UserWithDepartment } from '../users/types.js';
 
 export type ProposalRow = typeof proposals.$inferSelect;
 export type ProposalAttachmentRow = typeof proposalAttachments.$inferSelect;
@@ -11,7 +11,7 @@ export type ReviewDecision = ReviewRow['decision'];
 
 /** Row joined with its author (detail + list responses, §11.3). */
 export interface ProposalWithStudent extends ProposalRow {
-  student: UserRow;
+  student: UserWithDepartment;
 }
 
 /** The API shape of a proposal — row plus the author as a PublicUser. */

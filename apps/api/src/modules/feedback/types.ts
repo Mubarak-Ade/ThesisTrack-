@@ -1,11 +1,11 @@
 import type { feedback } from '../../schema/index.js';
-import type { PublicUser, UserRow } from '../users/types.js';
+import type { PublicUser, UserWithDepartment } from '../users/types.js';
 
 export type FeedbackRow = typeof feedback.$inferSelect;
 
 /** Row joined with its author — every response carries the PublicUser. */
 export interface FeedbackWithAuthor extends FeedbackRow {
-  author: UserRow;
+  author: UserWithDepartment;
 }
 
 /**

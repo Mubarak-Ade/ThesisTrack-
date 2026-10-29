@@ -10,6 +10,13 @@ import { db } from '../../src/config/db.js';
 import { env } from '../../src/config/env.js';
 import type { Role } from '../../src/lib/roles.js';
 import { hashPayload } from '../../src/middleware/idempotency.js';
+
+/** A valid `FAC/YY/DEPT/NNNNN` student number (design 2026-10-28), unique per call. */
+function regNo(): string {
+  const digits = String(parseInt(randomUUID().slice(0, 6), 16) % 100000).padStart(5, '0');
+  return `CST/22/SWE/${digits}`;
+}
+
 import { createProposalSchema } from '../../src/modules/proposals/schema.js';
 import {
   idempotencyKeys,
@@ -323,7 +330,13 @@ describe('POST /users + POST /users/import — replay', () => {
   it('same key twice → identical response, one account provisioned', async () => {
     const KEY = key();
     const email = `idem-${randomUUID().slice(0, 8)}@integration.test`;
-    const payload = { firstName: 'Idem', lastName: 'Potent', email, role: 'student' };
+    const payload = {
+      firstName: 'Idem',
+      lastName: 'Potent',
+      email,
+      role: 'student',
+      registrationNumber: regNo(),
+    };
 
     const r1 = await request(app)
       .post('/api/v1/users')
@@ -354,6 +367,7 @@ describe('POST /users + POST /users/import — replay', () => {
           lastName: 'One',
           email: `idem-a-${stamp}@integration.test`,
           role: 'student',
+          registrationNumber: regNo(),
         },
         {
           firstName: 'Import',

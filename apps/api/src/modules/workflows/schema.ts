@@ -29,9 +29,13 @@ export const stageInputSchema = z.object({
   requiresApproval: z.boolean().optional(),
 });
 
-/** GET /workflows — §11.14 `?program&includeArchived&page&limit`. */
+/**
+ * GET /workflows — `?departmentId&includeArchived&page&limit`.
+ * Department-keyed since design 2026-10-28 (PROPOSED ADR-16 amendment): the
+ * match key is the FK, not a free-text program string.
+ */
 export const listWorkflowsQuerySchema = paginationQuerySchema.extend({
-  program: z.string().max(255).optional(),
+  departmentId: z.string().uuid('Invalid department id').optional(),
   // Enum, not coerce.boolean(): z.coerce.boolean('false') is `true`.
   includeArchived: z.enum(['true', 'false']).optional(),
 });
@@ -42,7 +46,8 @@ export const listWorkflowsQuerySchema = paginationQuerySchema.extend({
  */
 export const createWorkflowSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(255),
-  program: z.string().max(255).nullable().optional(),
+  /** NULL/absent = the catch-all (default) workflow. */
+  departmentId: z.string().uuid('Invalid department id').nullable().optional(),
   academicSession: z.string().max(32).nullable().optional(),
   description: z.string().max(5000).nullable().optional(),
   stages: z.array(stageInputSchema).max(50).optional(),
@@ -60,13 +65,14 @@ export const createWorkflowSchema = z.object({
  * target could only be moved by `seed-workflows`. The flag therefore joins
  * this body (true clears every other workflow's flag in the same write;
  * false clears this one). The endpoint count is unchanged — the delta is a
- * request-body field like §11.0.2's `program`. POST still never sets it: a
+ * request-body field like §11.0.2's `departmentId`. POST still never sets it: a
  * newly created workflow never steals the flag. Flips LOCKED in Phase 16.
  */
 export const patchWorkflowSchema = z
   .object({
     name: z.string().trim().min(1, 'Name is required').max(255).optional(),
-    program: z.string().max(255).nullable().optional(),
+    /** NULL clears the department → catch-all/default workflow. */
+    departmentId: z.string().uuid('Invalid department id').nullable().optional(),
     academicSession: z.string().max(32).nullable().optional(),
     description: z.string().max(5000).nullable().optional(),
     archived: z.boolean().optional(),
@@ -76,7 +82,7 @@ export const patchWorkflowSchema = z
   .superRefine((value, ctx) => {
     const keys: Array<keyof typeof value> = [
       'name',
-      'program',
+      'departmentId',
       'academicSession',
       'description',
       'archived',

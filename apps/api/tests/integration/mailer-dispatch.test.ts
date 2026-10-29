@@ -18,6 +18,13 @@ import app from '../../src/app.js';
 import { db } from '../../src/config/db.js';
 import { env } from '../../src/config/env.js';
 import type { Role } from '../../src/lib/roles.js';
+
+/** A valid `FAC/YY/DEPT/NNNNN` student number (design 2026-10-28), unique per call. */
+function regNo(): string {
+  const digits = String(parseInt(randomUUID().slice(0, 6), 16) % 100000).padStart(5, '0');
+  return `CST/22/SWE/${digits}`;
+}
+
 import { users } from '../../src/schema/index.js';
 
 /**
@@ -119,7 +126,13 @@ describe('POST /users — dispatches exactly one invitation email', () => {
     const res = await request(app)
       .post('/api/v1/users')
       .set(auth(admin))
-      .send({ firstName: 'A', lastName: 'B', email, role: 'student' });
+      .send({
+        firstName: 'A',
+        lastName: 'B',
+        email,
+        role: 'student',
+        registrationNumber: regNo(),
+      });
     expect(res.status).toBe(201);
 
     expect(dispatchInvitationEmail).toHaveBeenCalledTimes(1);
@@ -148,9 +161,21 @@ describe('POST /users/import — post-commit dispatch, once per row', () => {
     const stamp = randomUUID().slice(0, 8);
     const batch = {
       users: [
-        { firstName: 'Imp', lastName: 'One', email: `imp-a-${stamp}@integration.test`, role: 'student' },
+        {
+          firstName: 'Imp',
+          lastName: 'One',
+          email: `imp-a-${stamp}@integration.test`,
+          role: 'student',
+          registrationNumber: regNo(),
+        },
         { firstName: 'Imp', lastName: 'Two', email: `imp-b-${stamp}@integration.test`, role: 'supervisor' },
-        { firstName: 'Imp', lastName: 'Three', email: `imp-c-${stamp}@integration.test`, role: 'student' },
+        {
+          firstName: 'Imp',
+          lastName: 'Three',
+          email: `imp-c-${stamp}@integration.test`,
+          role: 'student',
+          registrationNumber: regNo(),
+        },
       ],
     };
     const res = await request(app).post('/api/v1/users/import').set(auth(admin)).send(batch);
@@ -163,8 +188,20 @@ describe('POST /users/import — post-commit dispatch, once per row', () => {
     const stamp = randomUUID().slice(0, 8);
     const batch = {
       users: [
-        { firstName: 'Roll', lastName: 'One', email: `roll-a-${stamp}@integration.test`, role: 'student' },
-        { firstName: 'Roll', lastName: 'Two', email: `roll-b-${stamp}@integration.test`, role: 'student' },
+        {
+          firstName: 'Roll',
+          lastName: 'One',
+          email: `roll-a-${stamp}@integration.test`,
+          role: 'student',
+          registrationNumber: regNo(),
+        },
+        {
+          firstName: 'Roll',
+          lastName: 'Two',
+          email: `roll-b-${stamp}@integration.test`,
+          role: 'student',
+          registrationNumber: regNo(),
+        },
       ],
     };
 
@@ -229,7 +266,13 @@ describe('mail failure never changes an endpoint status', () => {
     const res = await request(app)
       .post('/api/v1/users')
       .set(auth(admin))
-      .send({ firstName: 'A', lastName: 'B', email, role: 'student' });
+      .send({
+        firstName: 'A',
+        lastName: 'B',
+        email,
+        role: 'student',
+        registrationNumber: regNo(),
+      });
 
     expect(res.status).toBe(201);
     const rows = await db.select().from(users).where(eq(users.email, email));

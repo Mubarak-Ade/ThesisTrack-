@@ -21,7 +21,7 @@ export async function insertSession(values: {
 export async function findSessionByTokenHash(tokenHash: string) {
   return db.query.sessions.findFirst({
     where: eq(sessions.tokenHash, tokenHash),
-    with: { user: true },
+    with: { user: { with: { department: true } } },
   });
 }
 
@@ -97,7 +97,7 @@ export async function findAccountTokenByHash(tokenHash: string) {
 export async function findInvitationByTokenHash(tokenHash: string) {
   return db.query.accountTokens.findFirst({
     where: and(eq(accountTokens.tokenHash, tokenHash), eq(accountTokens.type, 'activation')),
-    with: { user: true },
+    with: { user: { with: { department: true } } },
   });
 }
 

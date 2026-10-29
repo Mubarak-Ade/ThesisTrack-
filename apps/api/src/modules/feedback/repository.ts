@@ -21,7 +21,7 @@ export type WriteExecutor = Pick<typeof db, 'select' | 'insert' | 'update' | 'de
 export function findFeedbackById(id: string): Promise<FeedbackWithAuthor | undefined> {
   return db.query.feedback.findFirst({
     where: eq(feedback.id, id),
-    with: { author: true },
+    with: { author: { with: { department: true } } },
   });
 }
 
@@ -34,7 +34,7 @@ export function findFeedbackById(id: string): Promise<FeedbackWithAuthor | undef
 export function listProjectFeedback(projectId: string): Promise<FeedbackWithAuthor[]> {
   return db.query.feedback.findMany({
     where: and(eq(feedback.projectId, projectId), isNull(feedback.submissionId)),
-    with: { author: true },
+    with: { author: { with: { department: true } } },
     orderBy: [asc(feedback.createdAt), asc(feedback.id)],
   });
 }
@@ -43,7 +43,7 @@ export function listProjectFeedback(projectId: string): Promise<FeedbackWithAuth
 export function listSubmissionFeedback(submissionId: string): Promise<FeedbackWithAuthor[]> {
   return db.query.feedback.findMany({
     where: eq(feedback.submissionId, submissionId),
-    with: { author: true },
+    with: { author: { with: { department: true } } },
     orderBy: [asc(feedback.createdAt), asc(feedback.id)],
   });
 }

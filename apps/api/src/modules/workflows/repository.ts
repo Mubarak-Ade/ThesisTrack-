@@ -27,13 +27,13 @@ export type WriteExecutor = Pick<typeof db, 'insert' | 'update' | 'delete'>;
 /* ------------------------------------------------------------ definition */
 
 export interface WorkflowListFilters {
-  program: string | null;
+  departmentId: string | null;
   includeArchived: boolean;
   page: number;
   limit: number;
 }
 
-/** Filtered page plus total — §11.14's `?program&includeArchived&page&limit`. */
+/** Filtered page plus total — `?departmentId&includeArchived&page&limit`. */
 export async function listWorkflows(
   filters: WorkflowListFilters,
 ): Promise<{ rows: WorkflowRow[]; total: number }> {
@@ -42,10 +42,9 @@ export async function listWorkflows(
   if (!filters.includeArchived) {
     conditions.push(sql`archived_at is null`);
   }
-  if (filters.program) {
-    // Case-insensitive, matching the `lower(program)` unique index (§8.10) —
-    // the filter must agree with what the database considers "the same".
-    conditions.push(sql`lower(program) = lower(${filters.program})`);
+  if (filters.departmentId) {
+    // FK equality — the filter agrees with the unique index by construction.
+    conditions.push(sql`department_id = ${filters.departmentId}`);
   }
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -75,13 +74,15 @@ export function listWorkflowStages(workflowId: string): Promise<WorkflowStageRow
 }
 
 /**
- * ADR-16 branch 2 — the ONE active workflow for a program (FR-CW-08).
- * The `lower()` comparison is what the partial unique index enforces, so the
- * lookup agrees with what can actually exist.
+ * ADR-16 branch 2 — the ONE active workflow for a department (FR-CW-08).
+ * FK equality is what the partial unique index enforces, so the lookup agrees
+ * with what can actually exist (design 2026-10-28, PROPOSED ADR-16 amendment).
  */
-export function findActiveWorkflowByProgram(program: string): Promise<WorkflowRow | undefined> {
+export function findActiveWorkflowByDepartment(
+  departmentId: string,
+): Promise<WorkflowRow | undefined> {
   return db.query.workflows.findFirst({
-    where: sql`archived_at is null AND lower(program) = lower(${program})`,
+    where: and(sql`archived_at is null`, eq(workflows.departmentId, departmentId)),
     orderBy: [asc(workflows.createdAt), asc(workflows.id)],
   });
 }
@@ -95,11 +96,11 @@ export function findDefaultWorkflow(): Promise<WorkflowRow | undefined> {
 }
 
 /**
- * Conflict pre-check for the one-active-per-program slot: how many OTHER
- * active workflows already hold this program (§8.10 → 409).
+ * Conflict pre-check for the one-active-per-department slot: how many OTHER
+ * active workflows already hold this department (§8.10 → 409).
  */
-export async function countOtherActiveWorkflowsForProgram(
-  program: string,
+export async function countOtherActiveWorkflowsForDepartment(
+  departmentId: string,
   excludeWorkflowId: string | null,
 ): Promise<number> {
   const rows = await db
@@ -108,7 +109,7 @@ export async function countOtherActiveWorkflowsForProgram(
     .where(
       and(
         sql`archived_at is null`,
-        sql`lower(program) = lower(${program})`,
+        eq(workflows.departmentId, departmentId),
         excludeWorkflowId ? ne(workflows.id, excludeWorkflowId) : undefined,
       ),
     );

@@ -19,7 +19,7 @@ import {
   resendInvitation as reissueInvitation,
   updateUserPassword,
 } from '../users/service.js';
-import type { UserRow } from '../users/types.js';
+import type { UserWithDepartment } from '../users/types.js';
 import {
   consumeAccountTokenIfUnused,
   deleteAccountTokens,
@@ -75,7 +75,7 @@ function getDummyHash(): Promise<string> {
 export async function login(
   email: string,
   password: string,
-): Promise<{ user: UserRow; session: IssuedSession }> {
+): Promise<{ user: UserWithDepartment; session: IssuedSession }> {
   const user = await findUserByEmailRow(email);
 
   const storedHash = user?.passwordHash ?? (await getDummyHash());
@@ -114,7 +114,9 @@ export async function createSession(userId: string): Promise<IssuedSession> {
  * Validates a raw refresh token against the sessions table:
  * must exist, not be revoked, not be expired, and belong to an active user.
  */
-export async function resolveSession(token: string): Promise<{ sessionId: string; user: UserRow }> {
+export async function resolveSession(
+  token: string,
+): Promise<{ sessionId: string; user: UserWithDepartment }> {
   const row = await findSessionByTokenHash(hashToken(token));
 
   if (!row || !row.user) {
@@ -228,7 +230,7 @@ export async function consumeAccountToken(
 // ── Account lifecycle flows ───────────────────────────────────────────
 
 /** INVITED → ACTIVE: consumes the activation token and sets the password. */
-export async function activateAccount(token: string, password: string): Promise<UserRow> {
+export async function activateAccount(token: string, password: string): Promise<UserWithDepartment> {
   const { userId } = await consumeAccountToken(token, 'activation');
   const passwordHash = await hashPassword(password);
 

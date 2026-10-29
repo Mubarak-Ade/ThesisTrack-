@@ -117,7 +117,7 @@ export async function createProject(actorId: string, input: CreateProjectInput):
   // Explicit id (branch 1) is validated inside; an unknown one is a 400 on
   // `workflowId` — the §5.4 templateId discipline (§3.4: approval never fails
   // on workflow data, but an explicit bad id is still a request error).
-  const workflow = await resolveWorkflowForProject(input.workflowId, student.program);
+  const workflow = await resolveWorkflowForProject(input.workflowId, student.departmentId);
   const stages = workflow ? await loadWorkflowStages(workflow.id) : [];
 
   try {

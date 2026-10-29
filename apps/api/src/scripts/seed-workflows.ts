@@ -1,21 +1,25 @@
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import { db } from '../config/db.js';
-import { projectStages, users, workflowStages, workflows } from '../schema/index.js';
+import { departments, projectStages, users, workflowStages, workflows } from '../schema/index.js';
 
 /**
  * Seeds the workflow definitions required by spec §8.10 (ADR-15/ADR-16):
  *
- *   - `Default`  — program NULL, `is_default = true`: ADR-16's fallback
+ *   - `Default`  — department NULL, `is_default = true`: ADR-16's fallback
  *   - `Software Engineering`, `Zoology / Field Sciences` — one per §3.3
- *     discipline, so FR-CW-08's one-active-workflow-per-program (and therefore
- *     ADR-16's program match) is demonstrable out of the box.
+ *     discipline, so FR-CW-08's one-active-workflow-per-department (and
+ *     therefore ADR-16's FK match) is demonstrable out of the box.
+ *
+ * Departments (design 2026-10-28, PROPOSED ADR-11 reversal) are find-or-created
+ * before the workflows: `SWE` and `ZOO` are the codes a seeded student's
+ * registration number must carry.
  *
  * Idempotent and safe to re-run, like `seed:templates`: a workflow is matched
  * by `name` and repaired (re-activated, metadata refreshed, stage set brought
  * back to the seed order). Stage positions use a lift-then-assign pass because
  * `UNIQUE (workflow_id, position)` makes a direct 1..n rewrite collide
- * mid-flight (§8.10). A seed workflow whose program slot is already held by
+ * mid-flight (§8.10). A seed workflow whose department slot is already held by
  * another active workflow, or whose extra stages are materialised by live
  * projects, is reported and left alone — the seed never breaks a database.
  *
@@ -82,7 +86,8 @@ const finalSubmission = (dueOffsetDays: number): SeedStage =>
 
 type SeedWorkflow = {
   name: string;
-  program: string | null;
+  /** The managed department this workflow covers; NULL = the catch-all. */
+  department: { name: string; code: string } | null;
   academicSession: string | null;
   description: string;
   isDefault: boolean;
@@ -93,7 +98,7 @@ const SEEDS: SeedWorkflow[] = [
   {
     // §8.10's prescribed stage list, verbatim.
     name: 'Default',
-    program: null,
+    department: null,
     academicSession: null,
     description:
       'Discipline-neutral process (spec §8.10) — ADR-16’s fallback when no program matches.',
@@ -110,7 +115,7 @@ const SEEDS: SeedWorkflow[] = [
   {
     // §3.3: Proposal → Approval → Development → Progress Review → Final Submission.
     name: 'Software Engineering',
-    program: 'Software Engineering',
+    department: { name: 'Software Engineering', code: 'SWE' },
     academicSession: null,
     description: 'Software Engineering project process (spec §3.3).',
     isDefault: false,
@@ -126,7 +131,7 @@ const SEEDS: SeedWorkflow[] = [
     // §3.3: Proposal → Approval → Field Work → Laboratory Work → Analysis →
     // Report → Final Submission.
     name: 'Zoology / Field Sciences',
-    program: 'Zoology / Field Sciences',
+    department: { name: 'Zoology / Field Sciences', code: 'ZOO' },
     academicSession: null,
     description: 'Field and laboratory sciences process (spec §3.3).',
     isDefault: false,
@@ -211,6 +216,28 @@ async function repairStages(
   }
 }
 
+/**
+ * Find-or-create a seeded department. Names are matched case-insensitively
+ * (the same predicate as the active-name index); an archived row is reused
+ * as-is rather than silently resurrected — archiving is an admin decision.
+ */
+async function ensureDepartment(
+  def: { name: string; code: string },
+  createdBy: string | null,
+): Promise<string> {
+  const existing = await db.query.departments.findFirst({
+    where: sql`lower(${departments.name}) = lower(${def.name})`,
+    orderBy: [asc(departments.createdAt), asc(departments.id)],
+  });
+  if (existing) return existing.id;
+
+  const [created] = await db
+    .insert(departments)
+    .values({ name: def.name, code: def.code, createdBy })
+    .returning({ id: departments.id });
+  return created!.id;
+}
+
 async function main(): Promise<void> {
   const adminEmail = (process.env.ADMIN_EMAIL ?? 'admin@thesistrack.local').trim().toLowerCase();
   const admin = await db.query.users.findFirst({ where: eq(users.email, adminEmail) });
@@ -220,8 +247,16 @@ async function main(): Promise<void> {
   const notes: string[] = [];
   let totalStages = 0;
 
+  // Departments first — every non-default workflow links to one.
+  const departmentIds = new Map<string, string>();
+  for (const def of SEEDS) {
+    if (!def.department) continue;
+    departmentIds.set(def.department.name, await ensureDepartment(def.department, createdBy));
+  }
+
   for (const def of SEEDS) {
     try {
+      const departmentId = def.department ? (departmentIds.get(def.department.name) ?? null) : null;
       const workflowId = await db.transaction(async (tx) => {
         const existing = await tx.query.workflows.findFirst({
           where: eq(workflows.name, def.name),
@@ -245,7 +280,7 @@ async function main(): Promise<void> {
           const [updated] = await tx
             .update(workflows)
             .set({
-              program: def.program,
+              departmentId,
               academicSession: def.academicSession,
               description: def.description,
               isDefault: def.isDefault,
@@ -260,7 +295,7 @@ async function main(): Promise<void> {
             .insert(workflows)
             .values({
               name: def.name,
-              program: def.program,
+              departmentId,
               academicSession: def.academicSession,
               description: def.description,
               isDefault: def.isDefault,
@@ -278,12 +313,12 @@ async function main(): Promise<void> {
       totalStages += def.stages.length;
     } catch (err) {
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505') {
-        // FR-CW-08's one-active-per-program slot (or the single-default slot)
-        // is already held — the seed yields rather than clobbering a human's
-        // choice; a re-run after the conflict clears repairs it.
+        // FR-CW-08's one-active-per-department slot (or the single-default
+        // slot) is already held — the seed yields rather than clobbering a
+        // human's choice; a re-run after the conflict clears repairs it.
         notes.push(
-          def.program
-            ? `${def.name}: another active workflow already holds program "${def.program}" — skipped`
+          def.department
+            ? `${def.name}: another active workflow already holds department "${def.department.name}" — skipped`
             : `${def.name}: the default-workflow slot is held elsewhere — skipped`,
         );
         continue;

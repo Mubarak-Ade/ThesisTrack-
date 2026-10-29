@@ -54,7 +54,7 @@ export async function listWorkflows(
   query: ListWorkflowsQuery,
 ): Promise<{ workflows: WorkflowRow[]; total: number }> {
   const { rows, total } = await repo.listWorkflows({
-    program: normalizeText(query.program),
+    departmentId: query.departmentId ?? null,
     includeArchived: query.includeArchived === 'true',
     page: query.page,
     limit: query.limit,
@@ -77,8 +77,8 @@ export function loadWorkflowStages(workflowId: string): Promise<WorkflowStageRow
  * ADR-16 resolution — the exact chain, shared by `POST /projects` (explicit
  * override first) and §5.4 approval (no explicit input, branch 1 absent):
  *
- *   explicit workflowId → the ONE active workflow matching the student's
- *   program → the flagged default → none (zero stages).
+ *   explicit workflowId → the ONE active workflow for the student's
+ *   department (FK) → the flagged default → none (zero stages).
  *
  * Approval never fails on workflow data: only an explicit *unknown* id is a
  * request error (400, path `workflowId` — the §5.4 templateId discipline),
@@ -86,7 +86,7 @@ export function loadWorkflowStages(workflowId: string): Promise<WorkflowStageRow
  */
 export async function resolveWorkflowForProject(
   explicitWorkflowId: string | null | undefined,
-  studentProgram: string | null | undefined,
+  studentDepartmentId: string | null | undefined,
 ): Promise<WorkflowRow | undefined> {
   if (explicitWorkflowId) {
     const explicit = await repo.findWorkflowById(explicitWorkflowId);
@@ -98,9 +98,8 @@ export async function resolveWorkflowForProject(
     return explicit;
   }
 
-  const program = normalizeText(studentProgram);
-  if (program) {
-    const match = await repo.findActiveWorkflowByProgram(program);
+  if (studentDepartmentId) {
+    const match = await repo.findActiveWorkflowByDepartment(studentDepartmentId);
     if (match) return match;
   }
 
@@ -136,23 +135,23 @@ function stageFields(stage: StageInput): StageFieldValues {
   };
 }
 
-async function assertProgramSlotFree(
-  program: string,
+async function assertDepartmentSlotFree(
+  departmentId: string,
   excludeWorkflowId: string | null,
 ): Promise<void> {
-  const holders = await repo.countOtherActiveWorkflowsForProgram(program, excludeWorkflowId);
+  const holders = await repo.countOtherActiveWorkflowsForDepartment(departmentId, excludeWorkflowId);
   if (holders > 0) {
-    throw new ConflictError(`Another active workflow already covers "${program}"`);
+    throw new ConflictError('Another active workflow already covers this department');
   }
 }
 
-/** POST /workflows — admin only (§4.6); one active workflow per program. */
+/** POST /workflows — admin only (§4.6); one active workflow per department. */
 export async function createWorkflow(
   actorId: string,
   input: CreateWorkflowInput,
 ): Promise<WorkflowDetail> {
-  const program = normalizeText(input.program);
-  if (program) await assertProgramSlotFree(program, null);
+  const departmentId = input.departmentId ?? null;
+  if (departmentId) await assertDepartmentSlotFree(departmentId, null);
 
   const stages = input.stages ?? [];
 
@@ -161,7 +160,7 @@ export async function createWorkflow(
       const workflow = await repo.insertWorkflow(
         {
           name: input.name,
-          program,
+          departmentId,
           academicSession: normalizeText(input.academicSession),
           description: normalizeText(input.description),
           isDefault: false, // the flag belongs to seed-workflows (§8.10), not the API
@@ -183,8 +182,8 @@ export async function createWorkflow(
     });
   } catch (err) {
     if (isUniqueViolation(err)) {
-      // Lost the one-active-per-program race between pre-check and insert.
-      throw new ConflictError(`Another active workflow already covers "${program}"`);
+      // Lost the one-active-per-department race between pre-check and insert.
+      throw new ConflictError('Another active workflow already covers this department');
     }
     throw err;
   }
@@ -206,10 +205,10 @@ export async function patchWorkflow(id: string, input: PatchWorkflowInput): Prom
   if (!workflow) throw new NotFoundError('Workflow');
 
   const willBeActive = input.archived === undefined ? workflow.archivedAt === null : !input.archived;
-  const targetProgram =
-    input.program !== undefined ? normalizeText(input.program) : workflow.program;
-  if (willBeActive && targetProgram) {
-    await assertProgramSlotFree(targetProgram, id);
+  const targetDepartmentId =
+    input.departmentId !== undefined ? input.departmentId : workflow.departmentId;
+  if (willBeActive && targetDepartmentId) {
+    await assertDepartmentSlotFree(targetDepartmentId, id);
   }
 
   // §16.3 "set default" (PROPOSED delta 2026-10-04): the flag selects ADR-16's
@@ -226,7 +225,7 @@ export async function patchWorkflow(id: string, input: PatchWorkflowInput): Prom
 
   const metadata: Partial<typeof workflows.$inferInsert> = {};
   if (input.name !== undefined) metadata.name = input.name;
-  if (input.program !== undefined) metadata.program = targetProgram;
+  if (input.departmentId !== undefined) metadata.departmentId = input.departmentId;
   if (input.academicSession !== undefined) metadata.academicSession = normalizeText(input.academicSession);
   if (input.description !== undefined) metadata.description = normalizeText(input.description);
   if (input.archived !== undefined) {
@@ -235,7 +234,7 @@ export async function patchWorkflow(id: string, input: PatchWorkflowInput): Prom
     metadata.archivedAt = input.archived ? (workflow.archivedAt ?? new Date()) : null;
   }
   if (input.isDefault === false) metadata.isDefault = false;
-  // Archiving releases the default slot exactly as it releases the program
+  // Archiving releases the default slot exactly as it releases the department
   // slot: the resolver ignores archived rows, so a flag left behind here would
   // silently blind ADR-16 to every other default candidate.
   if (input.archived === true && workflow.isDefault && input.isDefault !== true) {
@@ -361,7 +360,7 @@ export async function patchWorkflow(id: string, input: PatchWorkflowInput): Prom
 /**
  * DELETE /workflows/:workflowId — §11.14: **422** when any project references
  * it. The spec's "archive instead" is PATCH `{archived: true}` (§11.2 gives
- * projects the same shape), which releases the program slot without touching
+ * projects the same shape), which releases the department slot without touching
  * history — `projects.workflow_id` is RESTRICT for exactly this reason (I15).
  */
 export async function deleteWorkflow(id: string): Promise<WorkflowRow> {

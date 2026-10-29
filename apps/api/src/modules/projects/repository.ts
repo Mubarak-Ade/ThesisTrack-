@@ -89,7 +89,7 @@ export async function listProjects(
       orderBy: [sql`${projects.createdAt} desc`, sql`${projects.id} desc`],
       limit: filters.limit,
       offset: (filters.page - 1) * filters.limit,
-      with: { student: true },
+      with: { student: { with: { department: true } } },
     }),
     db.select({ total: sql<string>`count(*)` }).from(projects).where(where),
   ]);

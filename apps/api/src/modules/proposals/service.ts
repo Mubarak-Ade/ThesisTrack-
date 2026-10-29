@@ -16,7 +16,7 @@ import { removeFileQuietly, resolveStorageKey, UPLOADS_ROOT } from '../../lib/st
 import type { AuthUser } from '../../middleware/auth.js';
 import { assertProjectIdNotArchived } from '../projects/service.js';
 import type { ProjectRow } from '../projects/types.js';
-import type { UserRow } from '../users/types.js';
+import type { UserWithDepartment } from '../users/types.js';
 import {
   getActiveAssignmentForStudent,
   getCaseload,
@@ -136,7 +136,9 @@ function toAttachmentView(row: ProposalAttachmentRow): ProposalAttachmentView {
   };
 }
 
-function toReviewView(row: ReviewRow & { reviewer: UserRow }): ReviewView {
+function toReviewView(
+  row: ReviewRow & { reviewer: UserWithDepartment },
+): ReviewView {
   return {
     id: row.id,
     proposalId: row.proposalId,
@@ -458,7 +460,7 @@ export async function reviewProposal(
   // none. A missing program or no matching workflow simply yields zero
   // stages; approval never fails on workflow data (§3.4, ADR-16).
   const student = await findUserById(proposal.studentId);
-  const workflow = await resolveWorkflowForProject(null, student?.program ?? null);
+  const workflow = await resolveWorkflowForProject(null, student?.departmentId ?? null);
   const workflowStages = workflow ? await loadWorkflowStages(workflow.id) : [];
 
   let outcome: { project: ProjectRow; review: ReviewRow };

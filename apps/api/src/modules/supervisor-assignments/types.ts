@@ -1,10 +1,10 @@
 import type { supervisorAssignments } from '../../schema/index.js';
-import type { PublicUser, UserRow } from '../users/types.js';
+import type { PublicUser, UserWithDepartment } from '../users/types.js';
 
 export type SupervisorAssignmentRow = typeof supervisorAssignments.$inferSelect;
 
 /** Assignment row joined with its supervisor (for responses). */
-export type AssignmentWithSupervisor = SupervisorAssignmentRow & { supervisor: UserRow };
+export type AssignmentWithSupervisor = SupervisorAssignmentRow & { supervisor: UserWithDepartment };
 
 /** The API shape of an assignment — history's answer to who/when/by whom. */
 export interface AssignmentView {

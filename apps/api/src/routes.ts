@@ -9,6 +9,7 @@ import { routes as supervisorAssignmentsRoutes } from './modules/supervisor-assi
 import { routes as proposalsRoutes } from './modules/proposals/index.js';
 import { routes as milestonesRoutes } from './modules/milestones/index.js';
 import { routes as workflowsRoutes } from './modules/workflows/index.js';
+import { routes as departmentsRoutes } from './modules/departments/index.js';
 import { routes as submissionsRoutes } from './modules/submissions/index.js';
 import { routes as reviewsRoutes } from './modules/reviews/index.js';
 import { routes as feedbackRoutes } from './modules/feedback/index.js';
@@ -28,6 +29,7 @@ import { routes as notificationsRoutes } from './modules/notifications/index.js'
  *   /api/v1/milestones + /api/v1/milestone-templates + /api/v1/projects/:id/milestones
  *                     →  modules/milestones
  *   /api/v1/workflows + /api/v1/projects/:id/stages → modules/workflows
+ *   /api/v1/departments →  modules/departments
  *   /api/v1/submissions/… + /api/v1/submission-versions/… + /api/v1/projects/:id/submissions
  *                     →  modules/submissions
  *   /api/v1/submissions/:id/reviews + /api/v1/projects/:id/reviews → modules/reviews
@@ -46,6 +48,7 @@ api.use(supervisorAssignmentsRoutes);
 api.use(proposalsRoutes);
 api.use(milestonesRoutes);
 api.use(workflowsRoutes);
+api.use(departmentsRoutes);
 api.use(submissionsRoutes);
 api.use(reviewsRoutes);
 api.use(feedbackRoutes);

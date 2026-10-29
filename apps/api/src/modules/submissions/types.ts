@@ -1,5 +1,5 @@
 import type { submissionVersions, submissions } from '../../schema/index.js';
-import type { PublicUser, UserRow } from '../users/types.js';
+import type { PublicUser, UserWithDepartment } from '../users/types.js';
 
 export type SubmissionRow = typeof submissions.$inferSelect;
 export type SubmissionVersionRow = typeof submissionVersions.$inferSelect;
@@ -7,7 +7,7 @@ export type SubmissionStatus = SubmissionRow['status'];
 
 /** Row joined with its author (detail + list responses, §11.5). */
 export interface SubmissionWithSubmitter extends SubmissionRow {
-  submitter: UserRow;
+  submitter: UserWithDepartment;
 }
 
 /** The API shape of a submission — row plus the author as a PublicUser. */

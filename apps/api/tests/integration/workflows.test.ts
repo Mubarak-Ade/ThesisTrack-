@@ -9,6 +9,7 @@ import { db } from '../../src/config/db.js';
 import { env } from '../../src/config/env.js';
 import type { Role } from '../../src/lib/roles.js';
 import {
+  departments,
   projectStages,
   proposals,
   reviews,
@@ -24,7 +25,7 @@ import {
  * (spec §3.4, §5.9, §11.2, §11.13, §11.14, ADR-15/ADR-16, I1/I15/I16/I17).
  *
  * Covers task 4.11's workflow half:
- *   - workflow CRUD rules (409 program conflict, 422 referenced delete,
+ *   - workflow CRUD rules (409 department conflict, 422 referenced delete,
  *     whole-set stage edit with server renumbering, archive semantics);
  *   - ADR-16 resolution order across all four paths, on BOTH project-creation
  *     paths (admin POST /projects and §5.4 approval);
@@ -61,7 +62,7 @@ function tokenFor(user: { id: string; email: string; role: string }): string {
   );
 }
 
-async function createUser(role: Role, program?: string): Promise<TestUser> {
+async function createUser(role: Role, departmentId?: string): Promise<TestUser> {
   const id = randomUUID();
   const [row] = await db
     .insert(users)
@@ -70,11 +71,29 @@ async function createUser(role: Role, program?: string): Promise<TestUser> {
       firstName: 'Integration',
       lastName: id.slice(0, 8),
       role,
-      program: program ?? null,
+      departmentId: departmentId ?? null,
       isActive: true,
     })
     .returning();
   return { id: row.id, email: row.email, role, token: tokenFor(row) };
+}
+
+/** A unique 4-letter department code — the schema accepts `^[A-Z]{2,4}$`. */
+function codeFor(): string {
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const raw = randomUUID().replace(/-/g, '');
+  let code = '';
+  for (let i = 0; i < 4; i += 1) code += letters[parseInt(raw[i] ?? '0', 16) % letters.length];
+  return code;
+}
+
+/** A fresh active department — ADR-16's match key (design 2026-10-28). */
+async function makeDepartment(label: string): Promise<{ id: string; name: string; code: string }> {
+  const [row] = await db
+    .insert(departments)
+    .values({ name: `${label} ${stamp}`, code: codeFor() })
+    .returning();
+  return { id: row.id, name: row.name, code: row.code! };
 }
 
 const auth = (user: TestUser): { Authorization: string } => ({
@@ -146,8 +165,7 @@ let wCRUD: any; // throwaway definition CRUD rules operate on
 let wGated: any; // 3-stage gated workflow: approval + advance + freeze
 let gatedProjectId = '';
 
-const GATED_PROGRAM = `Gated Prog ${stamp}`;
-const APPROVAL_PROGRAM = `Approval Prog ${stamp}`;
+let GATED_DEPARTMENT: { id: string; name: string; code: string };
 
 /** The §11.14 gate ladder used by both the approval and advance flows. */
 const GATED_STAGES = [
@@ -175,13 +193,14 @@ beforeAll(async () => {
   sup2 = await createUser('supervisor');
 
   defaultWorkflowId = (await ensureDefaultWorkflow()).id;
+  GATED_DEPARTMENT = await makeDepartment('Gated');
 
   // The gated workflow: explicit-id project creation, the advance ladder, the
   // snapshot-freeze proof and the activity feed all hang off this one row.
   const res = await request(app)
     .post('/api/v1/workflows')
     .set(auth(admin))
-    .send({ name: `Gated ${stamp}`, program: GATED_PROGRAM, stages: GATED_STAGES });
+    .send({ name: `Gated ${stamp}`, departmentId: GATED_DEPARTMENT.id, stages: GATED_STAGES });
   expect(res.status).toBe(201);
   wGated = d(res);
 
@@ -198,15 +217,16 @@ afterAll(async () => {
 /* ========================================================================= */
 
 describe('workflow definition CRUD (§11.14)', () => {
-  const PROG = `CRUD Prog ${stamp}`;
+  let crudDepartment: { id: string; name: string; code: string };
 
   beforeAll(async () => {
+    crudDepartment = await makeDepartment('CRUD');
     const res = await request(app)
       .post('/api/v1/workflows')
       .set(auth(admin))
       .send({
         name: `CRUD ${stamp}`,
-        program: PROG,
+        departmentId: crudDepartment.id,
         academicSession: '2026/2027',
         stages: [
           { name: 'One', requiresSubmission: true },
@@ -234,7 +254,7 @@ describe('workflow definition CRUD (§11.14)', () => {
   it('admin create renumbers positions 1..n (server-owned, contiguous)', async () => {
     expect(wCRUD.workflow).toMatchObject({
       name: `CRUD ${stamp}`,
-      program: PROG,
+      departmentId: crudDepartment.id,
       academicSession: '2026/2027',
       archivedAt: null,
       isDefault: false,
@@ -248,14 +268,14 @@ describe('workflow definition CRUD (§11.14)', () => {
     });
   });
 
-  it('a second ACTIVE workflow for the same program is 409 — case-folded', async () => {
+  it('a second ACTIVE workflow for the same department is 409', async () => {
     const res = await request(app)
       .post('/api/v1/workflows')
       .set(auth(admin))
-      .send({ name: `Duplicate ${stamp}`, program: PROG.toLowerCase(), stages: [] });
+      .send({ name: `Duplicate ${stamp}`, departmentId: crudDepartment.id, stages: [] });
     expect(res.status).toBe(409);
     expect(e(res).code).toBe('RESOURCE_CONFLICT');
-    expect(e(res).message).toBe(`Another active workflow already covers "${PROG.toLowerCase()}"`);
+    expect(e(res).message).toBe('Another active workflow already covers this department');
   });
 
   it('reads detail as supervisor; unknown → 404, malformed → 400, student → 403', async () => {
@@ -368,15 +388,19 @@ describe('workflow definition CRUD (§11.14)', () => {
 /* ========================================================================= */
 
 describe('archive semantics: PATCH {archived} instead of DELETE (§11.14)', () => {
-  const PROG = `Archive Prog ${stamp}`;
+  let archiveDepartment: { id: string; name: string; code: string };
   let archivable: any;
   let slotTaker: any;
+
+  beforeAll(async () => {
+    archiveDepartment = await makeDepartment('Archive');
+  });
 
   it('archives a definition with PATCH {archived:true}', async () => {
     const create = await request(app)
       .post('/api/v1/workflows')
       .set(auth(admin))
-      .send({ name: `Archivable ${stamp}`, program: PROG, stages: [{ name: 'A' }] });
+      .send({ name: `Archivable ${stamp}`, departmentId: archiveDepartment.id, stages: [{ name: 'A' }] });
     expect(create.status).toBe(201);
     archivable = d(create);
 
@@ -390,7 +414,7 @@ describe('archive semantics: PATCH {archived} instead of DELETE (§11.14)', () =
 
   it('archived rows are hidden by default and visible with includeArchived', async () => {
     const hidden = await request(app)
-      .get(`/api/v1/workflows?program=${encodeURIComponent(PROG)}&limit=100`)
+      .get(`/api/v1/workflows?departmentId=${archiveDepartment.id}&limit=100`)
       .set(auth(admin));
     expect(hidden.status).toBe(200);
     expect(d(hidden).workflows).toHaveLength(0);
@@ -398,18 +422,22 @@ describe('archive semantics: PATCH {archived} instead of DELETE (§11.14)', () =
 
     const shown = await request(app)
       .get(
-        `/api/v1/workflows?program=${encodeURIComponent(PROG)}&includeArchived=true&limit=100`,
+        `/api/v1/workflows?departmentId=${archiveDepartment.id}&includeArchived=true&limit=100`,
       )
       .set(auth(admin));
     expect(shown.status).toBe(200);
     expect(d(shown).workflows.map((w: any) => w.id)).toContain(archivable.workflow.id);
   });
 
-  it('archiving RELEASES the one-active-per-program slot (§8.10)', async () => {
+  it('archiving RELEASES the one-active-per-department slot (§8.10)', async () => {
     const res = await request(app)
       .post('/api/v1/workflows')
       .set(auth(admin))
-      .send({ name: `Slot taker ${stamp}`, program: PROG, stages: [{ name: 'B' }] });
+      .send({
+        name: `Slot taker ${stamp}`,
+        departmentId: archiveDepartment.id,
+        stages: [{ name: 'B' }],
+      });
     expect(res.status).toBe(201);
     slotTaker = d(res);
   });
@@ -420,7 +448,7 @@ describe('archive semantics: PATCH {archived} instead of DELETE (§11.14)', () =
       .set(auth(admin))
       .send({ archived: false });
     expect(res.status).toBe(409);
-    expect(e(res).message).toBe(`Another active workflow already covers "${PROG}"`);
+    expect(e(res).message).toBe('Another active workflow already covers this department');
     expect(d(await request(app).get(`/api/v1/workflows/${archivable.workflow.id}`).set(auth(admin))).workflow.archivedAt).toBeTruthy();
   });
 
@@ -454,7 +482,6 @@ describe('ADR-16 resolution on POST /projects — four branches (§3.4)', () => 
       .set(auth(admin))
       .send({
         name: `Explicit ${stamp}`,
-        program: `Explicit Prog ${stamp}`,
         stages: [{ name: 'E1' }, { name: 'E2' }],
       });
     expect(res.status).toBe(201);
@@ -462,7 +489,7 @@ describe('ADR-16 resolution on POST /projects — four branches (§3.4)', () => 
   });
 
   it('branch 1 — an explicit workflowId wins and materialises its stages', async () => {
-    const student = await createUser('student', `Explicit Prog ${stamp}`);
+    const student = await createUser('student');
     const res = await createProjectAs(admin, student.id, {
       workflowId: explicitWorkflow.workflow.id,
     });
@@ -484,29 +511,28 @@ describe('ADR-16 resolution on POST /projects — four branches (§3.4)', () => 
     expect(e(res).details).toEqual([{ path: 'workflowId', message: 'Workflow not found' }]);
   });
 
-  it('branch 2 — the student’s program matches, case-insensitively', async () => {
-    const workflowProgram = `Program Match ${stamp}`;
+  it('branch 2 — the student’s department matches (FK, not a string)', async () => {
+    const department = await makeDepartment('Program Match');
     const created = await request(app)
       .post('/api/v1/workflows')
       .set(auth(admin))
       .send({
         name: `Program match ${stamp}`,
-        program: workflowProgram,
+        departmentId: department.id,
         stages: [{ name: 'M1' }, { name: 'M2' }, { name: 'M3' }],
       });
     expect(created.status).toBe(201);
     const workflow = d(created);
 
-    // The student's program differs in case — `lower()` must still match.
-    const student = await createUser('student', workflowProgram.toLowerCase());
+    const student = await createUser('student', department.id);
     const res = await createProjectAs(admin, student.id);
     expect(res.status).toBe(201);
     expect(d(res).project.workflowId).toBe(workflow.workflow.id);
     expect(await stagesOf(d(res).project.id)).toHaveLength(3);
   });
 
-  it('branch 3 — no program match falls back to the flagged default', async () => {
-    const student = await createUser('student', `Unmapped Program ${stamp}`);
+  it('branch 3 — no department match falls back to the flagged default', async () => {
+    const student = await createUser('student');
     const res = await createProjectAs(admin, student.id);
     expect(res.status).toBe(201);
     expect(d(res).project.workflowId).toBe(defaultWorkflowId);
@@ -514,7 +540,7 @@ describe('ADR-16 resolution on POST /projects — four branches (§3.4)', () => 
   });
 
   it('branch 4 — no default at all yields ZERO stages, never a failure', async () => {
-    const student = await createUser('student', `Unmapped 2 ${stamp}`);
+    const student = await createUser('student');
     const archive = await request(app)
       .patch(`/api/v1/workflows/${defaultWorkflowId}`)
       .set(auth(admin))
@@ -541,7 +567,7 @@ describe('ADR-16 resolution on POST /projects — four branches (§3.4)', () => 
   });
 
   it('I1 — a second active project for the same student is 409', async () => {
-    const student = await createUser('student', `Unmapped 3 ${stamp}`);
+    const student = await createUser('student');
     const first = await createProjectAs(admin, student.id);
     expect(first.status).toBe(201);
 
@@ -565,20 +591,20 @@ describe('ADR-16 resolution on POST /projects — four branches (§3.4)', () => 
 describe('approval path: §5.4 step 5 snapshot + §5.9 auto-advance (4.10)', () => {
   let approvedProjectId = '';
 
-  it('approving materialises the program-matched workflow with stage 1 auto-advanced', async () => {
+  it('approving materialises the department-matched workflow with stage 1 auto-advanced', async () => {
+    const department = await makeDepartment('Approval');
     const created = await request(app)
       .post('/api/v1/workflows')
       .set(auth(admin))
       .send({
         name: `Approval flow ${stamp}`,
-        program: APPROVAL_PROGRAM,
+        departmentId: department.id,
         stages: GATED_STAGES,
       });
     expect(created.status).toBe(201);
     const workflow = d(created);
 
-    // Deliberate case difference: ADR-16 branch 2 must fold case.
-    stApproval = await createUser('student', APPROVAL_PROGRAM.toLowerCase());
+    stApproval = await createUser('student', department.id);
     const proposal = await request(app)
       .post('/api/v1/proposals')
       .set(auth(stApproval))
@@ -629,18 +655,18 @@ describe('approval path: §5.4 step 5 snapshot + §5.9 auto-advance (4.10)', () 
   });
 
   it('an ungated stage 1 does NOT auto-advance — it stays the actor’s to move', async () => {
-    const ungatedProgram = `Ungated Prog ${stamp}`;
+    const department = await makeDepartment('Ungated');
     const created = await request(app)
       .post('/api/v1/workflows')
       .set(auth(admin))
       .send({
         name: `Ungated ${stamp}`,
-        program: ungatedProgram,
+        departmentId: department.id,
         stages: [{ name: 'Free one' }, { name: 'Free two' }],
       });
     expect(created.status).toBe(201);
 
-    const student = await createUser('student', ungatedProgram);
+    const student = await createUser('student', department.id);
     const proposal = await request(app)
       .post('/api/v1/proposals')
       .set(auth(student))
@@ -951,7 +977,7 @@ describe('GET /projects scoping (§11.2)', () => {
   beforeAll(async () => {
     // Assignment FIRST, then the project — POST /projects back-fills the
     // assignment's project_id, which is what keys the supervisor's scope.
-    const student = await createUser('student', `Caseload Prog ${stamp}`);
+    const student = await createUser('student');
     await db.insert(supervisorAssignments).values({
       studentId: student.id,
       supervisorId: sup2.id,
@@ -1023,9 +1049,9 @@ describe('GET /projects scoping (§11.2)', () => {
 /* ========================================================================= */
 
 describe('set default via PATCH (§16.3 builder "set default" — PROPOSED delta 2026-10-04)', () => {
-  const PROG_A = `DefaultA Prog ${stamp}`;
-  const PROG_B = `DefaultB Prog ${stamp}`;
-  const PROG_C = `DefaultC Prog ${stamp}`;
+  let departmentA: { id: string };
+  let departmentB: { id: string };
+  let departmentC: { id: string };
   let wA: any;
   let wB: any;
   let wArchived: any;
@@ -1039,15 +1065,22 @@ describe('set default via PATCH (§16.3 builder "set default" — PROPOSED delta
 
   beforeAll(async () => {
     originalDefaultId = defaultWorkflowId;
-    for (const [slot, program] of [
-      ['A', PROG_A],
-      ['B', PROG_B],
-      ['C', PROG_C],
+    departmentA = await makeDepartment('DefaultA');
+    departmentB = await makeDepartment('DefaultB');
+    departmentC = await makeDepartment('DefaultC');
+    for (const [slot, department] of [
+      ['A', departmentA],
+      ['B', departmentB],
+      ['C', departmentC],
     ] as const) {
       const res = await request(app)
         .post('/api/v1/workflows')
         .set(auth(admin))
-        .send({ name: `SetDefault${slot} ${stamp}`, program, stages: [{ name: `${slot} one` }] });
+        .send({
+          name: `SetDefault${slot} ${stamp}`,
+          departmentId: department.id,
+          stages: [{ name: `${slot} one` }],
+        });
       expect(res.status).toBe(201);
       if (slot === 'A') wA = d(res);
       if (slot === 'B') wB = d(res);

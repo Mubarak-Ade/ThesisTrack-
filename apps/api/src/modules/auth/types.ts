@@ -1,4 +1,4 @@
-import type { UserRow } from '../users/types.js';
+import type { UserRow, UserWithDepartment } from '../users/types.js';
 
 export type AccountTokenType = 'activation' | 'password_reset';
 
@@ -9,7 +9,7 @@ export interface IssuedSession {
 }
 
 export interface RotatedSession extends IssuedSession {
-  user: UserRow;
+  user: UserWithDepartment;
 }
 
 export interface IssuedAccountToken {

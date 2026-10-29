@@ -1,8 +1,14 @@
-import { and, desc, eq, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 
 import { db } from '../../config/db.js';
-import { users } from '../../schema/index.js';
-import type { ListUsersFilters, ListUsersPage, UserRow } from './types.js';
+import { departments, users } from '../../schema/index.js';
+import type {
+  DepartmentRef,
+  ListUsersFilters,
+  ListUsersPage,
+  UserRow,
+  UserWithDepartment,
+} from './types.js';
 
 /**
  * A repository function may run against the pool or inside a caller's
@@ -15,16 +21,19 @@ export type InsertExecutor = Pick<typeof db, 'insert'>;
 export type UserPatch = Partial<
   Pick<
     typeof users.$inferInsert,
-    'firstName' | 'lastName' | 'role' | 'isActive' | 'registrationNumber' | 'program'
+    'firstName' | 'lastName' | 'role' | 'isActive' | 'registrationNumber' | 'departmentId'
   >
 >;
 
-export async function findUserByEmail(email: string): Promise<UserRow | undefined> {
-  return db.query.users.findFirst({ where: eq(users.email, email.toLowerCase()) });
+export async function findUserByEmail(email: string): Promise<UserWithDepartment | undefined> {
+  return db.query.users.findFirst({
+    where: eq(users.email, email.toLowerCase()),
+    with: { department: true },
+  });
 }
 
-export async function findUserById(id: string): Promise<UserRow | undefined> {
-  return db.query.users.findFirst({ where: eq(users.id, id) });
+export async function findUserById(id: string): Promise<UserWithDepartment | undefined> {
+  return db.query.users.findFirst({ where: eq(users.id, id), with: { department: true } });
 }
 
 export async function insertUser(
@@ -91,12 +100,22 @@ export async function listUsers(filters: ListUsersFilters): Promise<ListUsersPag
   if (filters.isActive !== undefined) {
     conditions.push(eq(users.isActive, filters.isActive));
   }
+  if (filters.departmentId) {
+    conditions.push(eq(users.departmentId, filters.departmentId));
+  }
+  if (filters.missingRegistrationNumber) {
+    // Grandfathering banner: only students, and only those the backfill left
+    // without a number (design §4) — never supervisors/admins.
+    conditions.push(and(eq(users.role, 'student'), isNull(users.registrationNumber))!);
+  }
   if (filters.q) {
     const pattern = `%${escapeLike(filters.q)}%`;
     const match = or(
       ilike(users.firstName, pattern),
       ilike(users.lastName, pattern),
       ilike(users.email, pattern),
+      // Department name through the managed FK (design 2026-10-28).
+      sql`exists (select 1 from departments d where d.id = ${users.departmentId} and d.name ilike ${pattern})`,
     );
     if (match) conditions.push(match);
   }
@@ -106,6 +125,7 @@ export async function listUsers(filters: ListUsersFilters): Promise<ListUsersPag
   const [rows, counted] = await Promise.all([
     db.query.users.findMany({
       where,
+      with: { department: true },
       orderBy: [desc(users.createdAt), desc(users.id)],
       limit: filters.limit,
       offset: (filters.page - 1) * filters.limit,
@@ -138,4 +158,63 @@ export async function findExistingEmails(emails: string[]): Promise<Set<string>>
   }
   const rows = await db.select({ email: users.email }).from(users).where(inArray(users.email, emails));
   return new Set(rows.map((row) => row.email));
+}
+
+/**
+ * Which of the given numbers are already taken (returned lowercased for
+ * case-insensitive comparison) — bulk import pre-check.
+ */
+export async function findExistingRegistrationNumbers(numbers: string[]): Promise<Set<string>> {
+  if (numbers.length === 0) return new Set();
+  const rows = await db
+    .select({ number: sql<string>`lower(${users.registrationNumber})` })
+    .from(users)
+    .where(inArray(sql`lower(${users.registrationNumber})`, numbers.map((n) => n.toLowerCase())));
+  return new Set(rows.map((row) => row.number));
+}
+
+/**
+ * Case-insensitive registration-number clash check (design 2026-10-28).
+ * The same predicate as the `users_registration_number_unique` partial index.
+ */
+export function findUserByRegistrationNumber(
+  registrationNumber: string,
+  excludeUserId: string | null,
+): Promise<UserRow | undefined> {
+  return db.query.users.findFirst({
+    where: and(
+      sql`lower(${users.registrationNumber}) = lower(${registrationNumber})`,
+      excludeUserId ? ne(users.id, excludeUserId) : undefined,
+    ),
+    orderBy: [desc(users.id)],
+  });
+}
+
+/** The `{ id, name, code }` view of one department (freshly written rows). */
+export async function findDepartmentRef(id: string): Promise<DepartmentRef | undefined> {
+  const [row] = await db
+    .select({ id: departments.id, name: departments.name, code: departments.code })
+    .from(departments)
+    .where(eq(departments.id, id))
+    .limit(1);
+  return row;
+}
+
+/** Bulk department references — bulk import resolution. */
+export function listDepartmentRefs(ids: string[]): Promise<DepartmentRef[]> {
+  if (ids.length === 0) return Promise.resolve([]);
+  return db
+    .select({ id: departments.id, name: departments.name, code: departments.code })
+    .from(departments)
+    .where(inArray(departments.id, ids));
+}
+
+/** Which of the given ids are ACTIVE departments — bulk import pre-check. */
+export async function listActiveDepartmentIds(ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await db
+    .select({ id: departments.id })
+    .from(departments)
+    .where(and(inArray(departments.id, ids), sql`archived_at is null`));
+  return new Set(rows.map((row) => row.id));
 }
