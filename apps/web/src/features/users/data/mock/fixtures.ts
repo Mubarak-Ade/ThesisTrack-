@@ -2,8 +2,20 @@
  * Sample data for concerns with no endpoint yet (spec §4 matrix) and for
  * read-fallback snapshots. Fixtures flow through the same types/mappers as
  * live data; ids are fixed UUIDs so profile links behave like live rows.
+ *
+ * Departments are the managed rows of design 2026-10-28 (PROPOSED ADR-11
+ * reversal): the same six names the API seed creates, with fixed ids so the
+ * fallback directory can be filtered exactly like live rows.
  */
+import type { DepartmentRef } from '@/features/departments/data/types';
 import type { ConsoleUser } from '../types';
+
+const INF: DepartmentRef = { id: '00000000-0000-4000-8000-000000000101', name: 'Informatics', code: 'INF' };
+const CYB: DepartmentRef = { id: '00000000-0000-4000-8000-000000000102', name: 'Cyber Security', code: 'CYB' };
+const IAF: DepartmentRef = { id: '00000000-0000-4000-8000-000000000103', name: 'Institutional Affairs', code: 'IAF' };
+const ARC: DepartmentRef = { id: '00000000-0000-4000-8000-000000000104', name: 'Architecture', code: 'ARC' };
+const DAT: DepartmentRef = { id: '00000000-0000-4000-8000-000000000105', name: 'Data Science', code: 'DAT' };
+const EEE: DepartmentRef = { id: '00000000-0000-4000-8000-000000000106', name: 'Electrical Engineering', code: 'EEE' };
 
 export const MOCK_USERS: ConsoleUser[] = [
   {
@@ -17,8 +29,7 @@ export const MOCK_USERS: ConsoleUser[] = [
     isActive: true,
     createdAt: '2022-08-15T09:00:00.000Z',
     registrationNumber: null,
-    program: null,
-    department: 'Informatics',
+    department: INF,
     lastLoginLabel: '2 hours ago',
   },
   {
@@ -31,9 +42,8 @@ export const MOCK_USERS: ConsoleUser[] = [
     status: 'ACTIVE',
     isActive: true,
     createdAt: '2023-09-12T09:00:00.000Z',
-    registrationNumber: 'STU-2023-0457',
-    program: 'MSc Computer Science',
-    department: 'Informatics',
+    registrationNumber: 'CST/22/INF/00457',
+    department: INF,
     lastLoginLabel: '5 hours ago',
   },
   {
@@ -47,8 +57,7 @@ export const MOCK_USERS: ConsoleUser[] = [
     isActive: false,
     createdAt: '2021-03-04T09:00:00.000Z',
     registrationNumber: null,
-    program: null,
-    department: 'Cyber Security',
+    department: CYB,
     lastLoginLabel: '3 days ago',
   },
   {
@@ -61,9 +70,8 @@ export const MOCK_USERS: ConsoleUser[] = [
     status: 'ACTIVE',
     isActive: true,
     createdAt: '2024-01-22T09:00:00.000Z',
-    registrationNumber: 'STU-2024-0117',
-    program: 'MSc Data Science',
-    department: 'Informatics',
+    registrationNumber: 'CST/22/DAT/00117',
+    department: DAT,
     lastLoginLabel: '1 day ago',
   },
   {
@@ -77,8 +85,7 @@ export const MOCK_USERS: ConsoleUser[] = [
     isActive: true,
     createdAt: '2020-11-09T09:00:00.000Z',
     registrationNumber: null,
-    program: null,
-    department: 'Institutional Affairs',
+    department: IAF,
     lastLoginLabel: 'Just now',
   },
   {
@@ -91,9 +98,8 @@ export const MOCK_USERS: ConsoleUser[] = [
     status: 'ACTIVE',
     isActive: true,
     createdAt: '2023-10-30T09:00:00.000Z',
-    registrationNumber: 'STU-2023-0882',
-    program: 'BSc Architecture',
-    department: 'Architecture',
+    registrationNumber: 'CST/22/ARC/00882',
+    department: ARC,
     lastLoginLabel: '1 week ago',
   },
   {
@@ -107,8 +113,7 @@ export const MOCK_USERS: ConsoleUser[] = [
     isActive: true,
     createdAt: '2019-06-17T09:00:00.000Z',
     registrationNumber: null,
-    program: null,
-    department: 'Data Science',
+    department: DAT,
     lastLoginLabel: '2 days ago',
   },
   {
@@ -121,9 +126,9 @@ export const MOCK_USERS: ConsoleUser[] = [
     status: 'INVITED',
     isActive: false,
     createdAt: '2026-09-20T09:00:00.000Z',
+    // Grandfathered fixture: a student who predates the rule (design §7).
     registrationNumber: null,
-    program: null,
-    department: 'Informatics',
+    department: INF,
     lastLoginLabel: 'Never',
   },
   {
@@ -136,9 +141,8 @@ export const MOCK_USERS: ConsoleUser[] = [
     status: 'ACTIVE',
     isActive: true,
     createdAt: '2023-02-14T09:00:00.000Z',
-    registrationNumber: 'STU-2023-0233',
-    program: 'BSc Architecture',
-    department: 'Architecture',
+    registrationNumber: 'CST/22/ARC/00233',
+    department: ARC,
     lastLoginLabel: '6 hours ago',
   },
   {
@@ -152,8 +156,7 @@ export const MOCK_USERS: ConsoleUser[] = [
     isActive: false,
     createdAt: '2026-09-22T09:00:00.000Z',
     registrationNumber: null,
-    program: null,
-    department: 'Cyber Security',
+    department: CYB,
     lastLoginLabel: 'Never',
   },
   {
@@ -167,8 +170,7 @@ export const MOCK_USERS: ConsoleUser[] = [
     isActive: true,
     createdAt: '2021-09-01T09:00:00.000Z',
     registrationNumber: null,
-    program: null,
-    department: 'Electrical Engineering',
+    department: EEE,
     lastLoginLabel: '4 days ago',
   },
   {
@@ -181,9 +183,8 @@ export const MOCK_USERS: ConsoleUser[] = [
     status: 'ACTIVE',
     isActive: true,
     createdAt: '2024-04-08T09:00:00.000Z',
-    registrationNumber: 'STU-2024-0451',
-    program: 'MSc Data Science',
-    department: 'Data Science',
+    registrationNumber: 'CST/22/DAT/00451',
+    department: DAT,
     lastLoginLabel: '12 hours ago',
   },
 ];
@@ -195,4 +196,3 @@ export const MOCK_STATS = {
   faculty: 156,
   inactive: 4,
 };
-

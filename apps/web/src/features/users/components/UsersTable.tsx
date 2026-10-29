@@ -262,7 +262,7 @@ export default function UsersTable({ rows, sort, onSort, loading }: UsersTablePr
                       <td className="px-3 py-3.5">
                         <RoleBadge role={user.role} />
                         <span className="mt-1 block truncate text-xs text-muted-foreground">
-                          {user.department ?? '—'}
+                          {user.department?.name ?? '—'}
                         </span>
                       </td>
                       <td className="px-3 py-3.5">

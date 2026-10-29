@@ -29,7 +29,7 @@ const INVITED: ConsoleUser = {
   isActive: false,
   createdAt: null,
   registrationNumber: null,
-  program: null,
+  department: { id: 'dept-inf', name: 'Informatics', code: 'INF' },
 };
 
 const ACTIVE: ConsoleUser = {

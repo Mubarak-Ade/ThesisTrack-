@@ -128,7 +128,7 @@ export function useWorkflows(args: WorkflowsPageArgs) {
       'workflows',
       args.page,
       args.limit,
-      args.program ?? '',
+      args.departmentId ?? '',
       args.includeArchived ? 'all' : 'active',
     ],
     queryFn: () => listWorkflows(args),

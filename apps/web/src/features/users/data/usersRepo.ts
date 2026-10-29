@@ -5,6 +5,7 @@
  *  - writes → always surface errors (Rule 3: never fake success).
  * Screens import from this file (or `data/index`) — never raw DTOs.
  */
+import { listDepartments } from '@/features/departments/data/departmentsRepo';
 import { api, ApiError } from '@/lib/api/http';
 import { formatRelative } from '@/lib/utils/time';
 import { ROLE_LABELS } from './constants';
@@ -17,6 +18,7 @@ import {
   mapSupervisorName,
   mapUserDetail,
   mapUsersPage,
+  resolveImportDepartments,
   toActivityItem,
   toCreateBody,
   toImportPayload,
@@ -43,13 +45,15 @@ function warn(scope: string, error: unknown): void {
   console.warn(`[usersRepo] ${scope}: using sample data —`, error);
 }
 
-/** Build the pinned query string (§A: page/limit/q/role/isActive). */
+/** Build the pinned query string (§A: page/limit/q/role/isActive/department). */
 function listQuery(args: ListUsersArgs): string {
   const params = new URLSearchParams({ page: String(args.page), limit: String(args.limit) });
   const q = args.q?.trim();
   if (q) params.set('q', q);
   if (args.role) params.set('role', args.role);
   if (args.isActive !== undefined) params.set('isActive', String(args.isActive));
+  if (args.departmentId) params.set('departmentId', args.departmentId);
+  if (args.missingRegistrationNumber) params.set('missingRegistrationNumber', 'true');
   return params.toString();
 }
 
@@ -59,6 +63,10 @@ function filterMock(args: ListUsersArgs): ConsoleUser[] {
   return MOCK_USERS.filter((user) => {
     if (args.role && user.role !== args.role) return false;
     if (args.isActive !== undefined && user.isActive !== args.isActive) return false;
+    if (args.departmentId && user.department?.id !== args.departmentId) return false;
+    if (args.missingRegistrationNumber) {
+      if (user.role !== 'student' || user.registrationNumber !== null) return false;
+    }
     if (q && !`${user.firstName} ${user.lastName} ${user.email}`.toLowerCase().includes(q)) {
       return false;
     }
@@ -208,15 +216,36 @@ export async function sendInvite(id: string): Promise<{ status: string }> {
   return { status: typeof payload.status === 'string' ? payload.status : 'INVITED' };
 }
 
-/** Bulk import write — 422 row errors surface to the wizard (§A). */
+/**
+ * Bulk import write — 422 row errors surface to the wizard (§A).
+ *
+ * The CSV carries a department NAME (a spreadsheet exports labels, not ids), so
+ * the managed list is fetched first and each name resolved case-insensitively
+ * (design 2026-10-28 §5). An unknown name is refused here, before any row is
+ * posted: all-or-nothing stays true, and the wizard can point at the bad row.
+ */
 export async function importUsers(rows: ImportRow[]): Promise<ImportResult> {
-  const payload = await api.post<unknown>('/users/import', toImportPayload(rows));
+  const { items } = await listDepartments({ limit: 100 });
+  const { resolved, unmatched } = resolveImportDepartments(rows, items);
+  if (unmatched.length > 0) {
+    throw new ApiError({
+      status: 422,
+      code: 'VALIDATION_ERROR',
+      message: 'Some departments do not exist. Fix the highlighted rows and try again.',
+      details: unmatched.map(({ index, department }) => ({
+        path: `users[${index}].department`,
+        message: `Unknown department "${department}"`,
+      })),
+    });
+  }
+  const payload = await api.post<unknown>('/users/import', toImportPayload(resolved));
   return mapImportResult(payload);
 }
 
 /**
- * Partial profile patch (§11.0.2 — `{ program }`, `null` clears it). Returns
- * the row the server actually stored. Write: errors propagate (Rule 3).
+ * Partial profile patch (design 2026-10-28 — `{ departmentId }`, `null` clears
+ * it). Returns the row the server actually stored. Write: errors propagate
+ * (Rule 3).
  */
 export async function updateUser(id: string, patch: UpdateUserInput): Promise<ConsoleUser> {
   const payload = await api.patch<unknown>(`/users/${id}`, patch);

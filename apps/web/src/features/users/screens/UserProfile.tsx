@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import FormMessage from '@/components/forms/FormMessage';
+import { useDepartments } from '@/features/departments/hooks/useDepartments';
 import { ApiError } from '@/lib/api/http';
 import ContactCard from '../components/ContactCard';
 import StatusBadge from '../components/StatusBadge';
@@ -50,16 +51,19 @@ function NotFound() {
   );
 }
 
-/** Honest helper copy for the §11.0.2 `program` field (ADR-16 auto-match). */
-const PROGRAM_HINT =
-  'ADR-16: the student’s program selects their workflow at approval; blank = default workflow.';
+/** `FAC/YY/DEPT/NNNNN` — mirrors the API's student rule (design 2026-10-28). */
+const REGISTRATION_PATTERN = /^[A-Z]{2,4}\/\d{2}\/[A-Z]{2,4}\/\d{5}$/;
+
+const SELECT_CLASS =
+  'flex h-11 w-full rounded-md border border-input bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1';
 
 /**
- * §11.0.2 `program` (ADR-16 workflow auto-match key): read-only until "Edit".
- * Blank on save → `null` (clears it); failures render inline and the editor
- * stays open — writes never fake success (Rule 3).
+ * Enrollment panel — registration number and managed department are editable.
+ * Students must keep a well-formed number; supervisors may optionally carry a
+ * staff number. The department drives the ADR-16 workflow match, so the DEPT
+ * segment is checked against its code before the save leaves the browser.
  */
-function ProgramPanel({
+function EnrollmentPanel({
   detail,
   onUpdated,
 }: {
@@ -67,31 +71,52 @@ function ProgramPanel({
   onUpdated: (user: ConsoleUser) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(detail.program ?? '');
+  const [registrationNumber, setRegistrationNumber] = useState(detail.registrationNumber ?? '');
+  const [departmentId, setDepartmentId] = useState(detail.department?.id ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { data: departmentPage, isLoading: departmentsLoading } = useDepartments();
+  const departments = departmentPage?.items ?? [];
+  const selectedDepartment = departments.find((department) => department.id === departmentId);
 
   const cancel = () => {
-    setDraft(detail.program ?? '');
+    setRegistrationNumber(detail.registrationNumber ?? '');
+    setDepartmentId(detail.department?.id ?? '');
     setError(null);
     setEditing(false);
   };
 
   const save = async () => {
-    const trimmed = draft.trim();
-    const program = trimmed === '' ? null : trimmed;
+    const trimmedRegistration = registrationNumber.trim().toUpperCase();
+    if (detail.role === 'student') {
+      if (!trimmedRegistration) {
+        setError('Registration number is required for students');
+        return;
+      }
+      if (!REGISTRATION_PATTERN.test(trimmedRegistration)) {
+        setError('Use FAC/YY/DEPT/NNNNN, e.g. CST/22/SWE/00825');
+        return;
+      }
+      if (selectedDepartment?.code && trimmedRegistration.split('/')[2] !== selectedDepartment.code) {
+        setError(`The DEPT segment must be ${selectedDepartment.code} for the selected department`);
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
-      const updated = await updateUser(detail.id, { program });
+      const updated = await updateUser(detail.id, {
+        registrationNumber: trimmedRegistration || null,
+        departmentId: departmentId || null,
+      });
       onUpdated(updated);
       setEditing(false);
-      toast.success('Program updated');
+      toast.success('Enrollment details updated');
     } catch (cause) {
       setError(
         cause instanceof ApiError
           ? cause.message
-          : 'Unable to save the program. Check your connection and try again.',
+          : 'Unable to save enrollment details. Check your connection and try again.',
       );
     } finally {
       setSaving(false);
@@ -104,14 +129,20 @@ function ProgramPanel({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              Workflow
+              Enrollment
             </p>
             <h2 className="mt-1 font-display text-lg font-bold text-foreground">
-              Program (workflow match)
+              Registration &amp; Department
             </h2>
           </div>
           {!editing && (
-            <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label="Edit enrollment"
+              onClick={() => setEditing(true)}
+            >
               <Pencil aria-hidden="true" />
               Edit
             </Button>
@@ -119,22 +150,55 @@ function ProgramPanel({
         </div>
 
         {editing ? (
-          <div className="mt-4 space-y-2">
-            <Label
-              htmlFor="up-program"
-              className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
-            >
-              Program
-            </Label>
-            <Input
-              id="up-program"
-              value={draft}
-              maxLength={255}
-              placeholder="e.g. MSc Computer Science"
-              aria-invalid={!!error}
-              onChange={(event) => setDraft(event.target.value)}
-            />
-            <p className="text-xs italic text-muted-foreground">{PROGRAM_HINT}</p>
+          <div className="mt-4 space-y-3">
+            <div className="space-y-2">
+              <Label
+                htmlFor="up-registration"
+                className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+              >
+                Registration number
+                {detail.role === 'student' ? <span className="text-danger"> *</span> : null}
+              </Label>
+              <Input
+                id="up-registration"
+                value={registrationNumber}
+                maxLength={32}
+                placeholder="e.g. CST/22/INF/00825"
+                aria-invalid={!!error}
+                onChange={(event) => setRegistrationNumber(event.target.value)}
+              />
+              <p className="text-xs italic text-muted-foreground">
+                {detail.role === 'student'
+                  ? 'FAC/YY/DEPT/NNNNN — DEPT must be the department code.'
+                  : 'Optional for supervisors and administrators; any staff number is accepted.'}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label
+                htmlFor="up-department"
+                className="text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+              >
+                Department
+              </Label>
+              <select
+                id="up-department"
+                className={SELECT_CLASS}
+                value={departmentId}
+                disabled={departmentsLoading}
+                onChange={(event) => setDepartmentId(event.target.value)}
+              >
+                <option value="">Unaffiliated (default workflow)</option>
+                {departments.map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name}
+                    {department.code ? ` (${department.code})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs italic text-muted-foreground">
+                ADR-16: the department selects the student&apos;s workflow at approval.
+              </p>
+            </div>
             {error && <FormMessage>{error}</FormMessage>}
             <div className="flex flex-wrap gap-2 pt-1">
               <Button type="button" size="sm" onClick={() => void save()} disabled={saving}>
@@ -146,10 +210,22 @@ function ProgramPanel({
             </div>
           </div>
         ) : (
-          <>
-            <p className="mt-3 break-words text-sm text-foreground">{detail.program ?? '—'}</p>
-            <p className="mt-1.5 text-xs italic text-muted-foreground">{PROGRAM_HINT}</p>
-          </>
+          <dl className="mt-4 space-y-3">
+            <div className="flex items-baseline justify-between gap-3 border-b border-border/70 pb-2">
+              <dt className="text-xs text-muted-foreground">Registration no.</dt>
+              <dd className="text-right text-sm font-medium text-foreground">
+                {detail.registrationNumber ?? '—'}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-xs text-muted-foreground">Department</dt>
+              <dd className="text-right text-sm font-medium text-foreground">
+                {detail.department
+                  ? `${detail.department.name}${detail.department.code ? ` (${detail.department.code})` : ''}`
+                  : '—'}
+              </dd>
+            </div>
+          </dl>
         )}
       </CardContent>
     </Card>
@@ -284,7 +360,7 @@ export default function UserProfile() {
                       <StatusBadge status={detail.status} className="uppercase" />
                     </div>
                     <p className="mt-1.5 text-sm text-muted-foreground">
-                      {titleCaseRole(detail.role)} • {detail.program ?? 'Unaffiliated'}
+                      {titleCaseRole(detail.role)} • {detail.department?.name ?? 'No department'}
                     </p>
                   </div>
                 </div>
@@ -318,8 +394,8 @@ export default function UserProfile() {
               <ActivityFeed detail={detail} />
             </div>
             <div className="space-y-4">
-              <ProgramPanel
-                key={detail.id}
+              <EnrollmentPanel
+                key={`enrollment-${detail.id}`}
                 detail={detail}
                 onUpdated={(user) => setDetail((prev) => (prev ? { ...prev, ...user } : prev))}
               />

@@ -2,12 +2,36 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
+import type { Department } from '@/features/departments/data/types';
 import type { CreatedUser } from '../data/types';
 import { createUser } from '../data/usersRepo';
 import UserCreate from './UserCreate';
 
-vi.mock('../data/usersRepo', () => ({
-  createUser: vi.fn(),
+vi.mock('../data/usersRepo', () => ({ createUser: vi.fn() }));
+
+const INF: Department = {
+  id: '00000000-0000-4000-8000-000000000101',
+  name: 'Informatics',
+  code: 'INF',
+  archived: false,
+  archivedAt: null,
+  activeWorkflow: null,
+  studentCount: 4,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
+const CYB: Department = {
+  ...INF,
+  id: '00000000-0000-4000-8000-000000000102',
+  name: 'Cyber Security',
+  code: 'CYB',
+};
+
+vi.mock('@/features/departments/hooks/useDepartments', () => ({
+  useDepartments: () => ({
+    data: { items: [INF, CYB], total: 2, page: 1, limit: 100 },
+    isLoading: false,
+  }),
 }));
 
 const renderCreate = () =>
@@ -29,6 +53,25 @@ function fillIdentity() {
   });
 }
 
+function createdStudent(extra: Partial<CreatedUser['user']> = {}): CreatedUser {
+  return {
+    user: {
+      id: '99999999-9999-4999-8999-999999999999',
+      firstName: 'Console',
+      lastName: 'E2E',
+      email: 'console-e2e@test.local',
+      role: 'student',
+      status: 'INVITED',
+      isActive: false,
+      createdAt: '2026-09-25T00:00:00.000Z',
+      registrationNumber: 'CST/22/INF/00001',
+      department: { id: INF.id, name: INF.name, code: INF.code },
+      ...extra,
+    },
+    status: 'INVITED',
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -46,6 +89,52 @@ describe('UserCreate (plan 5)', () => {
     expect(screen.getByText('Select a role')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add User' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Discard Changes' })).toBeInTheDocument();
+    expect(createUser).not.toHaveBeenCalled();
+  });
+
+  it('requires a registration number when the role is student', async () => {
+    renderCreate();
+    fillIdentity();
+    fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create User Profile' }));
+
+    expect(
+      await screen.findByText('Registration number is required for students'),
+    ).toBeInTheDocument();
+    expect(createUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed student number with the FAC/YY/DEPT/NNNNN hint', async () => {
+    renderCreate();
+    fillIdentity();
+    fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
+    fireEvent.change(screen.getByLabelText(/Registration Number/i), {
+      target: { value: 'STU-2026-0001' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create User Profile' }));
+
+    expect(
+      await screen.findByText('Use FAC/YY/DEPT/NNNNN, e.g. CST/22/SWE/00825'),
+    ).toBeInTheDocument();
+    expect(createUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects a DEPT segment that does not match the department code', async () => {
+    renderCreate();
+    fillIdentity();
+    fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
+    fireEvent.change(screen.getByLabelText('Academic Department'), { target: { value: INF.id } });
+    fireEvent.change(screen.getByLabelText(/Registration Number/i), {
+      target: { value: 'CST/22/CYB/00001' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create User Profile' }));
+
+    expect(
+      await screen.findByText('The DEPT segment must be INF for the selected department'),
+    ).toBeInTheDocument();
     expect(createUser).not.toHaveBeenCalled();
   });
 
@@ -76,100 +165,89 @@ describe('UserCreate (plan 5)', () => {
     fillIdentity();
     fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
     fireEvent.change(screen.getByLabelText('Academic Department'), {
-      target: { value: 'Informatics' },
+      target: { value: INF.id },
+    });
+    fireEvent.change(screen.getByLabelText(/Registration Number/i), {
+      target: { value: 'CST/22/INF/00001' },
     });
 
     expect(await screen.findByText('Console E2E')).toBeInTheDocument();
     expect(screen.getByText('console-e2e@test.local')).toBeInTheDocument();
     expect(screen.getByText('student')).toBeInTheDocument(); // role badge (CSS-uppercased)
-    expect(screen.getAllByText('Informatics').length).toBeGreaterThan(0); // option + preview row
+    expect(screen.getAllByText('Informatics').length).toBeGreaterThan(0); // preview row
+    expect(screen.getByText('CST/22/INF/00001')).toBeInTheDocument();
     expect(screen.queryByText('Unassigned Role')).not.toBeInTheDocument();
   });
 
-  it('submits the mapped payload, shows success copy and navigates to the profile', async () => {
-    const created: CreatedUser = {
-      user: {
-        id: '99999999-9999-4999-8999-999999999999',
-        firstName: 'Console',
-        lastName: 'E2E',
-        email: 'console-e2e@test.local',
-        role: 'student',
-        status: 'INVITED',
-        isActive: false,
-        createdAt: '2026-09-25T00:00:00.000Z',
-        registrationNumber: null,
-        program: null,
-      },
-      status: 'INVITED',
-    };
-    vi.mocked(createUser).mockResolvedValue(created);
+  it('submits departmentId with the number and navigates to the profile', async () => {
+    vi.mocked(createUser).mockResolvedValue(createdStudent());
 
     renderCreate();
     fillIdentity();
     fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
-    fireEvent.change(screen.getByLabelText('Academic Department'), { target: { value: 'Informatics' } });
+    fireEvent.change(screen.getByLabelText(/Registration Number/i), {
+      target: { value: 'CST/22/INF/00001' },
+    });
+    fireEvent.change(screen.getByLabelText('Academic Department'), { target: { value: INF.id } });
 
     // Top submit button this time (Add User).
     fireEvent.click(screen.getByRole('button', { name: 'Add User' }));
 
-    // Repo receives the console input (UI-only department; repo drops it for §A).
     await waitFor(() => expect(createUser).toHaveBeenCalledTimes(1));
     expect(createUser).toHaveBeenCalledWith({
       firstName: 'Console',
       lastName: 'E2E',
       email: 'console-e2e@test.local',
       role: 'student',
-      department: 'Informatics',
+      registrationNumber: 'CST/22/INF/00001',
+      departmentId: INF.id,
     });
-    // §11.0.2: a blank program is unaffiliated — the key never leaves the browser.
     expect(vi.mocked(createUser).mock.calls[0]![0]).not.toHaveProperty('program');
+    expect(vi.mocked(createUser).mock.calls[0]![0]).not.toHaveProperty('department');
 
     // Lands on the profile route.
     expect(await screen.findByText('Profile loaded')).toBeInTheDocument();
   });
 
-  it('sends the optional program when one is entered (§11.0.2 / ADR-16)', async () => {
-    const created: CreatedUser = {
-      user: {
-        id: '99999999-9999-4999-8999-999999999999',
-        firstName: 'Console',
-        lastName: 'E2E',
-        email: 'console-e2e@test.local',
-        role: 'student',
-        status: 'INVITED',
-        isActive: false,
-        createdAt: '2026-09-25T00:00:00.000Z',
-        registrationNumber: null,
-        program: 'Data Science',
-      },
-      status: 'INVITED',
-    };
-    vi.mocked(createUser).mockResolvedValue(created);
+  it('leaves the department off the wire when none is chosen (unaffiliated)', async () => {
+    vi.mocked(createUser).mockResolvedValue(
+      createdStudent({ registrationNumber: 'STAFF-42', department: null, role: 'supervisor' }),
+    );
 
     renderCreate();
     fillIdentity();
-    fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
-    fireEvent.change(screen.getByLabelText('Program'), { target: { value: 'Data Science' } });
+    fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'supervisor' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Add User' }));
 
     await waitFor(() => expect(createUser).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(createUser).mock.calls[0]![0]).toMatchObject({ program: 'Data Science' });
-    expect(await screen.findByText('Profile loaded')).toBeInTheDocument();
+    expect(vi.mocked(createUser).mock.calls[0]![0]).toEqual({
+      firstName: 'Console',
+      lastName: 'E2E',
+      email: 'console-e2e@test.local',
+      role: 'supervisor',
+    });
   });
 
-  it('enforces the 255-character program cap client-side', async () => {
+  it('allows a supervisor an arbitrary staff number (no format check)', async () => {
+    vi.mocked(createUser).mockResolvedValue(
+      createdStudent({ registrationNumber: 'STAFF-42', department: null, role: 'supervisor' }),
+    );
+
     renderCreate();
     fillIdentity();
-    fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
-    fireEvent.change(screen.getByLabelText('Program'), { target: { value: 'x'.repeat(256) } });
+    fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'supervisor' } });
+    fireEvent.change(screen.getByLabelText(/Registration Number/i), {
+      target: { value: 'STAFF-42' },
+    });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create User Profile' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add User' }));
 
-    expect(
-      await screen.findByText('Program must be 255 characters or fewer'),
-    ).toBeInTheDocument();
-    expect(createUser).not.toHaveBeenCalled();
+    await waitFor(() => expect(createUser).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(createUser).mock.calls[0]![0]).toMatchObject({
+      registrationNumber: 'STAFF-42',
+      role: 'supervisor',
+    });
   });
 
   it('surfaces API write errors inline instead of faking success (Rule 3)', async () => {
@@ -180,6 +258,9 @@ describe('UserCreate (plan 5)', () => {
     renderCreate();
     fillIdentity();
     fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
+    fireEvent.change(screen.getByLabelText(/Registration Number/i), {
+      target: { value: 'CST/22/INF/00003' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Create User Profile' }));
 
     // Non-ApiError path renders the connection fallback copy.

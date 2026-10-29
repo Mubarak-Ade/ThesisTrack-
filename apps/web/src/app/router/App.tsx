@@ -55,6 +55,7 @@ import WorkflowList from '@/features/admin/screens/WorkflowList';
 import WorkflowEditor from '@/features/admin/screens/WorkflowEditor';
 import AdminMonitoring from '@/features/admin/screens/AdminMonitoring';
 import AdminReports from '@/features/admin/screens/AdminReports';
+import Departments from '@/features/departments/screens/Departments';
 
 /**
  * Route table (spec §10.3, PROPOSED — the tree below is its literal shape):
@@ -141,6 +142,8 @@ export default function App() {
             <Route path="/assignments" element={<AdminAssignments />} />
             <Route path="/workflows" element={<WorkflowList />} />
             <Route path="/workflows/:workflowId" element={<WorkflowEditor />} />
+            {/* Managed department list (design 2026-10-28 — ADR-11 reversal). */}
+            <Route path="/departments" element={<Departments />} />
             <Route path="/monitoring" element={<AdminMonitoring />} />
             <Route path="/reports" element={<AdminReports />} />
           </Route>

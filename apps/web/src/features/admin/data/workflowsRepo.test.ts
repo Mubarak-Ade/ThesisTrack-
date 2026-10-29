@@ -23,7 +23,7 @@ const del = vi.mocked(api.delete);
 const SUMMARY = {
   id: 'wf-1',
   name: 'BSc Software Engineering',
-  program: 'Informatics',
+  department: { id: 'dept-inf', name: 'Informatics', code: 'INF' },
   academicSession: '2026/2027',
   description: 'Six-stage pipeline',
   isDefault: true,
@@ -59,32 +59,32 @@ beforeEach(() => {
 });
 
 describe('listWorkflows', () => {
-  it('builds the query: program trimmed only when present, includeArchived opt-in', async () => {
+  it('builds the query: departmentId only when present, includeArchived opt-in', async () => {
     get.mockResolvedValue({ workflows: [SUMMARY], pagination: { page: 1, limit: 10, total: 4 } });
 
-    await listWorkflows({ page: 1, limit: 10, program: '  Informatics ', includeArchived: true });
+    await listWorkflows({ page: 1, limit: 10, departmentId: 'dept-inf', includeArchived: true });
 
     const url = String(get.mock.calls[0]?.[0]);
     expect(url).toContain('/workflows?');
     expect(url).toContain('page=1');
     expect(url).toContain('limit=10');
-    expect(url).toContain('program=Informatics');
+    expect(url).toContain('departmentId=dept-inf');
     expect(url).toContain('includeArchived=true');
   });
 
-  it('omits program and includeArchived when unused (active-only default)', async () => {
+  it('omits departmentId and includeArchived when unused (active-only default)', async () => {
     get.mockResolvedValue({ workflows: [], pagination: { page: 2, limit: 10, total: 0 } });
 
-    await listWorkflows({ page: 2, limit: 10, program: '   ' });
+    await listWorkflows({ page: 2, limit: 10 });
 
     const url = String(get.mock.calls[0]?.[0]);
-    expect(url).not.toContain('program=');
+    expect(url).not.toContain('departmentId=');
     expect(url).not.toContain('includeArchived=');
   });
 
-  it('maps summaries: isDefault flag, Date updatedAt, null program', async () => {
+  it('maps summaries: isDefault flag, Date updatedAt, null department', async () => {
     get.mockResolvedValue({
-      workflows: [{ ...SUMMARY, program: null, archivedAt: new Date('2026-04-01T00:00:00.000Z') }],
+      workflows: [{ ...SUMMARY, department: null, archivedAt: new Date('2026-04-01T00:00:00.000Z') }],
       pagination: { page: 1, limit: 10, total: 1 },
     });
 
@@ -92,7 +92,7 @@ describe('listWorkflows', () => {
 
     expect(page.items[0]).toMatchObject({
       isDefault: true,
-      program: null,
+      department: null,
       archivedAt: '2026-04-01T00:00:00.000Z',
       updatedAt: '2026-03-01T09:00:00.000Z',
     });
@@ -172,7 +172,7 @@ describe('workflow writes (FR-CW-01…03 + PROPOSED isDefault delta)', () => {
 
     const input = {
       name: 'New',
-      program: null,
+      departmentId: null,
       academicSession: null,
       description: null,
       stages: [{ name: 'Stage one', requiresSubmission: false }],

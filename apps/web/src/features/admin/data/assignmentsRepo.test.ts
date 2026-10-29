@@ -27,7 +27,7 @@ const STUDENT = {
   lastName: 'Holloway',
   email: 'm.holloway@university.edu',
   role: 'student',
-  program: 'Informatics',
+  department: { id: 'dept-inf', name: 'Informatics', code: 'INF' },
   isActive: true,
   createdAt: '2023-09-12T09:00:00.000Z',
 };
@@ -88,7 +88,7 @@ describe('directory pages (§11.0.2)', () => {
     expect(page.total).toBe(41);
     expect(page.items[0]).toMatchObject({
       name: 'Marcus Holloway',
-      program: 'Informatics',
+      department: { id: 'dept-inf', name: 'Informatics', code: 'INF' },
       isActive: true,
     });
   });

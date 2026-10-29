@@ -64,7 +64,7 @@ function AssignmentRow({
           <p className="truncate font-semibold text-foreground">{student.name}</p>
           <p className="truncate text-xs text-muted-foreground">{student.email}</p>
           <p className="truncate text-xs text-muted-foreground">
-            {student.program ?? 'Unaffiliated — default workflow (ADR-16)'}
+            {student.department?.name ?? 'Unaffiliated — default workflow (ADR-16)'}
           </p>
         </td>
         <td className="px-3 py-3.5">

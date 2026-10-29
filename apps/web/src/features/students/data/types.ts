@@ -21,9 +21,9 @@ export interface StudentRow {
   /** Display code — fixtures keep mockup STU-2024-001; live derives STU-XXXX from the id. */
   code: string;
   email: string;
-  /** §8.7 program — 'Unaffiliated' when the account carries none (ADR-11: no departments). */
+  /** Managed department display label — 'Unaffiliated' when the account carries none. */
   program: string;
-  /** Account state (`isActive`) — there is no department column in the API. */
+  /** Account state (`isActive`). */
   status: 'Active' | 'Inactive';
   thesisStatus: ThesisStatus;
   /** Year parsed from the account's `createdAt`; null when unreadable. */

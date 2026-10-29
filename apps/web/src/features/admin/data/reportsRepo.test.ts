@@ -26,7 +26,7 @@ const STUDENT = {
   lastName: 'Holloway',
   email: 'm@uni.edu',
   role: 'student',
-  program: 'Informatics',
+  department: { id: 'dept-inf', name: 'Informatics', code: 'INF' },
   isActive: true,
   createdAt: '2023-09-12T09:00:00.000Z',
 };
@@ -155,7 +155,7 @@ describe('buildReport datasets', () => {
     const url = String(get.mock.calls[0]?.[0]);
     expect(url).toContain('/users?role=student');
     expect(url).toContain('limit=100');
-    expect(dataset.headers).toEqual(['Name', 'Email', 'Program', 'Account', 'Created']);
+    expect(dataset.headers).toEqual(['Name', 'Email', 'Department', 'Account', 'Created']);
     expect(dataset.rows[0]).toEqual([
       'Marcus Holloway',
       'm@uni.edu',
@@ -227,7 +227,7 @@ describe('buildReport datasets', () => {
     expect(dataset.headers).toEqual([
       'Student',
       'Email',
-      'Program',
+      'Department',
       'Active supervisor',
       'Supervisor email',
       'Assigned at',

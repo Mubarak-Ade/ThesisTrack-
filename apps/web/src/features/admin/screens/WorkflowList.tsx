@@ -12,6 +12,7 @@ import ConfirmDialog from '@/components/feedback/ConfirmDialog';
 import EmptyState from '@/components/feedback/EmptyState';
 import ErrorState from '@/components/feedback/ErrorState';
 import LoadingState from '@/components/feedback/LoadingState';
+import { useDepartments } from '@/features/departments/hooks/useDepartments';
 import { formatRelative } from '@/lib/utils/time';
 import { useWorkflowWrite, useWorkflows } from '../hooks';
 import type { WorkflowSummary } from '../data';
@@ -32,7 +33,7 @@ type DialogState =
   | { kind: 'setDefault' | 'archive' | 'delete'; workflow: WorkflowSummary }
   | null;
 
-const EMPTY_CREATE = { name: '', program: '', academicSession: '', description: '' };
+const EMPTY_CREATE = { name: '', departmentId: '', academicSession: '', description: '' };
 
 export default function WorkflowList() {
   const navigate = useNavigate();
@@ -40,6 +41,8 @@ export default function WorkflowList() {
   const [includeArchived, setIncludeArchived] = useState(false);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [form, setForm] = useState(EMPTY_CREATE);
+  const { data: departmentPage, isLoading: departmentsLoading } = useDepartments();
+  const departments = departmentPage?.items ?? [];
 
   const query = useWorkflows({ page, limit: PAGE_SIZE, includeArchived });
   const write = useWorkflowWrite();
@@ -64,7 +67,7 @@ export default function WorkflowList() {
           action: 'create',
           input: {
             name,
-            program: form.program.trim() || null,
+            departmentId: form.departmentId || null,
             academicSession: form.academicSession.trim() || null,
             description: form.description.trim() || null,
             stages: [],
@@ -100,7 +103,7 @@ export default function WorkflowList() {
         { action: 'patch', workflowId: workflow.id, input: { archived: true } },
         {
           onSuccess: () => {
-            toast.success('Workflow archived — it releases its program slot (§8.10).');
+            toast.success('Workflow archived — it releases its department slot (§8.10).');
             close();
           },
           onError: (error) => toast.error(error.message),
@@ -147,6 +150,32 @@ export default function WorkflowList() {
         placeholder={props.placeholder}
         className="mt-1.5"
       />
+    </label>
+  );
+
+  const createDepartmentField = () => (
+    <label className="block">
+      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        Department
+      </span>
+      <select
+        aria-label="Department"
+        value={form.departmentId}
+        disabled={departmentsLoading}
+        onChange={(event) =>
+          setForm((current) => ({ ...current, departmentId: event.target.value }))
+        }
+        className="mt-1.5 flex h-11 w-full rounded-md border border-input bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+      >
+        <option value="">
+          {departmentsLoading ? 'Loading departments…' : 'Any (default / fallback)'}
+        </option>
+        {departments.map((department) => (
+          <option key={department.id} value={department.id}>
+            {department.name}
+          </option>
+        ))}
+      </select>
     </label>
   );
 
@@ -204,7 +233,7 @@ export default function WorkflowList() {
             icon={<GitBranch className="size-5" />}
             eyebrow="No definitions"
             title={includeArchived ? 'No workflows yet' : 'No active workflows'}
-            description="Create the first workflow: name it, tie it to a program, then add its stages in the editor. The seeded Default workflow covers unaffiliated students (ADR-16)."
+            description="Create the first workflow: name it, tie it to a department, then add its stages in the editor. The seeded Default workflow covers unaffiliated students (ADR-16)."
             action={
               <Button type="button" onClick={() => setDialog({ kind: 'create' })}>
                 <Plus aria-hidden="true" />
@@ -226,7 +255,7 @@ export default function WorkflowList() {
                 <thead>
                   <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                     <th scope="col" className="px-5 py-3 font-semibold">Workflow</th>
-                    <th scope="col" className="px-3 py-3 font-semibold">Program</th>
+                    <th scope="col" className="px-3 py-3 font-semibold">Department</th>
                     <th scope="col" className="px-3 py-3 font-semibold">Session</th>
                     <th scope="col" className="px-3 py-3 font-semibold">State</th>
                     <th scope="col" className="px-3 py-3 font-semibold text-right">Actions</th>
@@ -247,7 +276,7 @@ export default function WorkflowList() {
                         </p>
                       </td>
                       <td className="px-3 py-3.5 text-sm text-foreground">
-                        {workflow.program ?? <span className="text-muted-foreground">Any (fallback)</span>}
+                        {workflow.department?.name ?? <span className="text-muted-foreground">Any (fallback)</span>}
                       </td>
                       <td className="px-3 py-3.5 text-sm text-muted-foreground">
                         {workflow.academicSession ?? '—'}
@@ -341,10 +370,10 @@ export default function WorkflowList() {
           description={
             <span className="block space-y-3">
               <span className="block">{createField('name', 'Name', { required: true, placeholder: 'e.g. BSc Software Engineering' })}</span>
-              <span className="block">{createField('program', 'Program', { placeholder: 'Leave blank = any program' })}</span>
+              <span className="block">{createDepartmentField()}</span>
               <span className="block">{createField('academicSession', 'Academic session', { placeholder: 'e.g. 2026/2027' })}</span>
               <span className="block text-xs">
-                Only one ACTIVE workflow may hold a program (FR-CW-08) — a conflict answers 409.
+                Only one ACTIVE workflow may hold a department (FR-CW-08) — a conflict answers 409.
                 Stages are added in the editor; a new workflow never steals the default flag.
               </span>
             </span>
@@ -368,13 +397,13 @@ export default function WorkflowList() {
             dialog.kind === 'setDefault' ? (
               <>
                 <strong>{dialog.workflow.name}</strong> becomes the ADR-16 fallback target:
-                students with no program match resolve to it. The previous default is cleared
+                students with no department match resolve to it. The previous default is cleared
                 in the same write.
               </>
             ) : dialog.kind === 'archive' ? (
               <>
                 <strong>{dialog.workflow.name}</strong> leaves the active list and releases
-                its program slot. Projects keep their frozen stage snapshots (ADR-15).
+                its department slot. Projects keep their frozen stage snapshots (ADR-15).
               </>
             ) : (
               <>

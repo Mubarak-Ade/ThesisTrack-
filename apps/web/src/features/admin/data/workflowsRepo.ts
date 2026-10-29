@@ -20,7 +20,7 @@ import type {
 
 export async function listWorkflows(args: WorkflowsPageArgs): Promise<WorkflowsPage> {
   const params = new URLSearchParams({ page: String(args.page), limit: String(args.limit) });
-  if (args.program?.trim()) params.set('program', args.program.trim());
+  if (args.departmentId) params.set('departmentId', args.departmentId);
   if (args.includeArchived) params.set('includeArchived', 'true');
   const page = mapPaged<WorkflowSummary>(
     await api.get<unknown>(`/workflows?${params}`),

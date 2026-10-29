@@ -1,6 +1,7 @@
 import {
   Activity,
   Bell,
+  Building2,
   FileBarChart2,
   FolderGit2,
   FolderKanban,
@@ -81,7 +82,9 @@ export function navForRole(role: Role, state: NavState): NavItem[] {
       // Workflows sits between Assignments and Monitoring: a PROPOSED §10.5
       // delta (2026-10-04) — the LOCKED table pre-dates FR-CW's workflow
       // builder, and §16.3's "Workflow definitions" row needs a nav home
-      // (flips LOCKED at Phase 16).
+      // (flips LOCKED at Phase 16). Departments follows Workflows
+      // (design 2026-10-28, PROPOSED §10.5 delta): the managed list is what
+      // a workflow binds to, so it sits beside the builder.
       return [
         DASHBOARD,
         { label: 'Faculty', icon: GraduationCap, to: '/faculty' },
@@ -90,6 +93,7 @@ export function navForRole(role: Role, state: NavState): NavItem[] {
         PROPOSALS,
         { label: 'Assignments', icon: UserCheck, to: '/assignments' },
         { label: 'Workflows', icon: GitBranch, to: '/workflows' },
+        { label: 'Departments', icon: Building2, to: '/departments' },
         { label: 'Monitoring', icon: Activity, to: '/monitoring' },
         { label: 'Reports', icon: FileBarChart2, to: '/reports' },
         NOTIFICATIONS,

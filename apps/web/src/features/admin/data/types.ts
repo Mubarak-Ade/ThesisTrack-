@@ -69,7 +69,8 @@ export interface DirectoryStudent {
   id: string;
   name: string;
   email: string;
-  program: string | null;
+  /** Managed department (design 2026-10-28) — `null` = unaffiliated. */
+  department: import('@/features/departments/data/types').DepartmentRef | null;
   isActive: boolean;
   createdAt: string;
 }
@@ -101,7 +102,8 @@ export type ResponsibleRole = 'student' | 'supervisor' | 'administrator';
 export interface WorkflowSummary {
   id: string;
   name: string;
-  program: string | null;
+  /** Managed department this workflow serves (the FR-CW-08 slot); null = default. */
+  department: import('@/features/departments/data/types').DepartmentRef | null;
   academicSession: string | null;
   description: string | null;
   /** ADR-16 fallback target — §16.3's "set default" affordance. */
@@ -145,7 +147,7 @@ export interface StageInput {
 
 export interface CreateWorkflowInput {
   name: string;
-  program?: string | null;
+  departmentId?: string | null;
   academicSession?: string | null;
   description?: string | null;
   stages: StageInput[];
@@ -154,7 +156,7 @@ export interface CreateWorkflowInput {
 /** PATCH /workflows/:workflowId — metadata and/or stages and/or isDefault. */
 export interface PatchWorkflowInput {
   name?: string;
-  program?: string | null;
+  departmentId?: string | null;
   academicSession?: string | null;
   description?: string | null;
   archived?: boolean;
@@ -166,7 +168,7 @@ export interface PatchWorkflowInput {
 export interface WorkflowsPageArgs {
   page: number;
   limit: number;
-  program?: string;
+  departmentId?: string;
   includeArchived?: boolean;
 }
 

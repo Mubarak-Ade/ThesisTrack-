@@ -20,6 +20,10 @@ export default tseslint.config(
   {
     // Feature isolation: features import own-feature code relatively, so any
     // absolute `@/features/…` here is cross-feature. Features never use pages.
+    //
+    // One deliberate exception: `features/departments` is the platform-wide
+    // managed reference list (PROPOSED ADR-11 reversal) — every feature embeds
+    // its label and needs its dropdown, exactly like a lookup table.
     files: ['apps/web/src/features/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
@@ -27,7 +31,11 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['@/features', '@/features/*', '@/features/**'],
+              // Every `@/features/…` path except `features/departments`, the
+              // platform-wide managed list (the one deliberate exception).
+              // A regex, not group negation: ignore-pattern re-inclusion is
+              // defeated here by the parent pattern.
+              regex: '^@/features(?:$|/(?!departments(?:/|$)).*)$',
               message: 'Import own-feature code relatively; no cross-feature imports.',
             },
             {

@@ -3,6 +3,7 @@
  * unknown fields ignored, missing fields defaulted. Field-level drift is
  * absorbed here; structure-level drift throws so the repo can fall back.
  */
+import { mapDepartmentRef } from '@/features/departments/data/mappers';
 import { formatRelative } from '@/lib/utils/time';
 import { ROLES } from './constants';
 import type {
@@ -74,8 +75,8 @@ export function mapUserDto(value: unknown): ConsoleUser {
     isActive,
     createdAt: nullableStr(r.createdAt),
     registrationNumber: nullableStr(r.registrationNumber),
-    // §11.0.2 delta — missing/non-string → null (unaffiliated, §11.0.2/ADR-16).
-    program: nullableStr(r.program),
+    // Managed department (design 2026-10-28); absent/malformed → null.
+    department: mapDepartmentRef(r.department),
   };
 }
 
@@ -122,17 +123,19 @@ export function mapImportResult(value: unknown): { created: number } {
   throw new Error('POST /users/import: result shape changed');
 }
 
-/** Request body for `POST /users` and each `/users/import` row (§A + §11.0.2). */
+/** Request body for `POST /users` and each `/users/import` row. */
 export interface CreateBody {
   firstName: string;
   lastName: string;
   email: string;
   role: Role;
-  /** §11.0.2 delta — key omitted entirely when no non-blank program was given. */
-  program?: string;
+  /** Required by the API when role is `student`; optional for supervisors. */
+  registrationNumber?: string;
+  /** Managed department; omitted when blank (unaffiliated → default workflow). */
+  departmentId?: string;
 }
 
-/** Form input → API body. Drops UI-only fields (§A: create takes 4 fields + program). */
+/** Form input → API body. Carries the registration number and department id. */
 export function toCreateBody(input: CreateUserInput | ImportRow): CreateBody {
   const body: CreateBody = {
     firstName: input.firstName.trim(),
@@ -140,14 +143,40 @@ export function toCreateBody(input: CreateUserInput | ImportRow): CreateBody {
     email: input.email.trim().toLowerCase(),
     role: input.role,
   };
-  // §11.0.2: blank = unaffiliated — omit the key rather than send `program: ''`.
-  const program = input.program?.trim();
-  if (program) body.program = program;
+  const registrationNumber = input.registrationNumber?.trim();
+  if (registrationNumber) body.registrationNumber = registrationNumber;
+  const departmentId = input.departmentId?.trim();
+  if (departmentId) body.departmentId = departmentId;
   return body;
 }
 
 export function toImportPayload(rows: ImportRow[]): { users: CreateBody[] } {
   return { users: rows.map(toCreateBody) };
+}
+
+/**
+ * CSV department NAMES → ids (design 2026-10-28 §5). Matching is
+ * case-insensitive on the managed list, so a spreadsheet exported before a
+ * rename still resolves; an unknown or ambiguous name is reported per row
+ * rather than silently imported as unaffiliated.
+ */
+export function resolveImportDepartments(
+  rows: ImportRow[],
+  departments: { id: string; name: string }[],
+): { resolved: ImportRow[]; unmatched: { index: number; department: string }[] } {
+  const byName = new Map(departments.map((row) => [row.name.trim().toLowerCase(), row.id]));
+  const unmatched: { index: number; department: string }[] = [];
+  const resolved = rows.map((row, index) => {
+    const name = row.department?.trim();
+    if (!name) return { ...row, departmentId: null };
+    const id = byName.get(name.toLowerCase());
+    if (!id) {
+      unmatched.push({ index, department: name });
+      return row;
+    }
+    return { ...row, departmentId: id };
+  });
+  return { resolved, unmatched };
 }
 
 /* ------------------------------------------- live profile rails (§16.3) */
@@ -263,5 +292,5 @@ export function withRails(
     railsError: boolean;
   },
 ): UserDetail {
-  return { ...user, extras: { ...EMPTY_EXTRAS }, ...rails };
+  return { ...user, extras: { ...EMPTY_EXTRAS, department: user.department?.name ?? null }, ...rails };
 }

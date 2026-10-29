@@ -1,4 +1,4 @@
-import { CalendarDays, Languages, Mail, MapPin, MessageSquare, Phone } from 'lucide-react';
+import { Building2, CalendarDays, Languages, Mail, MapPin, MessageSquare, Phone } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -27,6 +27,7 @@ function formatDate(iso: string | null): string {
 export default function ContactCard({ detail }: { detail: UserDetail }) {
   const rows: Row[] = [
     { label: 'Email', value: detail.email, icon: Mail },
+    { label: 'Department', value: detail.extras.department ?? '—', icon: Building2 },
     { label: 'Phone', value: detail.extras.phone ?? '—', icon: Phone },
     { label: 'Office/Address', value: detail.extras.address ?? '—', icon: MapPin },
     { label: 'Portal Language', value: detail.extras.portalLanguage ?? '—', icon: Languages },

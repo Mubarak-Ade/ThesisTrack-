@@ -39,9 +39,12 @@ function asCode(id: string): string {
   return cleaned.length >= 4 ? `STU-${cleaned.slice(0, 4).toUpperCase()}` : id;
 }
 
-/** §8.7 program — no department column exists (ADR-11), so absent → 'Unaffiliated'. */
-function asProgram(value: unknown): string {
-  return typeof value === 'string' && value.length > 0 ? value : 'Unaffiliated';
+/** Managed department (2026-10-28) — absent → 'Unaffiliated'. */
+function asDepartment(value: unknown): string {
+  const department = asRecord(value);
+  return typeof department.name === 'string' && department.name.length > 0
+    ? department.name
+    : 'Unaffiliated';
 }
 
 function asYear(value: unknown): number | null {
@@ -68,7 +71,7 @@ function mapStudent(value: unknown): LiveStudent {
     id,
     name: `${str(r.firstName)} ${str(r.lastName)}`.trim(),
     email: str(r.email),
-    program: asProgram(r.program),
+    program: asDepartment(r.department),
     status: r.isActive === true ? 'Active' : 'Inactive',
     enrolledYear: asYear(r.createdAt),
   };

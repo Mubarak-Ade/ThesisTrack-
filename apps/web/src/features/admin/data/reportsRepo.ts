@@ -135,11 +135,11 @@ export async function buildReport(key: ReportKey): Promise<ReportDataset> {
     return {
       key,
       filename: 'thesistrack-students.csv',
-      headers: ['Name', 'Email', 'Program', 'Account', 'Created'],
+      headers: ['Name', 'Email', 'Department', 'Account', 'Created'],
       rows: rows.map((s) => [
         s.name,
         s.email,
-        s.program ?? '',
+        s.department?.name ?? '',
         s.isActive ? 'active' : 'inactive',
         s.createdAt,
       ]),
@@ -203,7 +203,7 @@ export async function buildReport(key: ReportKey): Promise<ReportDataset> {
       return [
         student.name,
         student.email,
-        student.program ?? '',
+        student.department?.name ?? '',
         active ? active.supervisor.name : 'Unassigned',
         active ? active.supervisor.email : '',
         active?.assignedAt ?? '',
@@ -213,7 +213,7 @@ export async function buildReport(key: ReportKey): Promise<ReportDataset> {
   return {
     key,
     filename: 'thesistrack-assignments.csv',
-    headers: ['Student', 'Email', 'Program', 'Active supervisor', 'Supervisor email', 'Assigned at'],
+    headers: ['Student', 'Email', 'Department', 'Active supervisor', 'Supervisor email', 'Assigned at'],
     rows,
     note:
       students.total > students.items.length

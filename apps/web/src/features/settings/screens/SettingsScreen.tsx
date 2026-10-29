@@ -100,7 +100,7 @@ export default function SettingsScreen() {
               <Field label="Email" value={user.email} />
               <Field label="Role" value={ROLE_LABEL[user.role] ?? user.role} />
               <Field label="Registration number" value={user.registrationNumber ?? '—'} />
-              <Field label="Program" value={user.program ?? '—'} />
+              <Field label="Department" value={user.department?.name ?? '—'} />
               <Field label="Account status" value={user.isActive ? 'Active' : 'Inactive'} />
             </dl>
           </CardContent>

@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import ConfirmDialog from '@/components/feedback/ConfirmDialog';
 import ErrorState from '@/components/feedback/ErrorState';
 import LoadingState from '@/components/feedback/LoadingState';
+import { useDepartments } from '@/features/departments/hooks/useDepartments';
 import { useWorkflow, useWorkflowWrite } from '../hooks';
 import type { ResponsibleRole, StageInput } from '../data';
 
@@ -74,8 +75,10 @@ export default function WorkflowEditor() {
   const navigate = useNavigate();
   const query = useWorkflow(workflowId);
   const write = useWorkflowWrite();
+  const { data: departmentPage, isLoading: departmentsLoading } = useDepartments();
+  const departments = departmentPage?.items ?? [];
 
-  const [meta, setMeta] = useState({ name: '', program: '', academicSession: '', description: '' });
+  const [meta, setMeta] = useState({ name: '', departmentId: '', academicSession: '', description: '' });
   const [stages, setStages] = useState<StageDraft[]>([]);
   const [setDefaultOpen, setSetDefaultOpen] = useState(false);
   const hydratedFor = useRef<string | null>(null);
@@ -90,7 +93,7 @@ export default function WorkflowEditor() {
     hydratedFor.current = detail.workflow.id;
     setMeta({
       name: detail.workflow.name,
-      program: detail.workflow.program ?? '',
+      departmentId: detail.workflow.department?.id ?? '',
       academicSession: detail.workflow.academicSession ?? '',
       description: detail.workflow.description ?? '',
     });
@@ -140,7 +143,7 @@ export default function WorkflowEditor() {
         workflowId: workflowId!,
         input: {
           name: meta.name.trim(),
-          program: meta.program.trim() || null,
+          departmentId: meta.departmentId || null,
           academicSession: meta.academicSession.trim() || null,
           description: meta.description.trim() || null,
           stages: payload,
@@ -153,7 +156,7 @@ export default function WorkflowEditor() {
           hydratedFor.current = saved.workflow.id;
           setMeta({
             name: saved.workflow.name,
-            program: saved.workflow.program ?? '',
+            departmentId: saved.workflow.department?.id ?? '',
             academicSession: saved.workflow.academicSession ?? '',
             description: saved.workflow.description ?? '',
           });
@@ -254,14 +257,26 @@ export default function WorkflowEditor() {
             />
           </label>
           <label className="block">
-            <Label htmlFor="wf-program">Program</Label>
-            <Input
-              id="wf-program"
-              value={meta.program}
-              onChange={(event) => setMeta((m) => ({ ...m, program: event.target.value }))}
-              placeholder="Blank = any program (fallback)"
-              className="mt-1.5"
-            />
+            <Label htmlFor="wf-department">Department</Label>
+            <select
+              id="wf-department"
+              value={meta.departmentId}
+              disabled={departmentsLoading}
+              onChange={(event) => setMeta((m) => ({ ...m, departmentId: event.target.value }))}
+              className="mt-1.5 flex h-11 w-full rounded-md border border-input bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+            >
+              <option value="">
+                {departmentsLoading ? 'Loading departments…' : 'Any (default / fallback)'}
+              </option>
+              {departments.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs italic text-muted-foreground">
+              One ACTIVE workflow per department (FR-CW-08). Blank is the ADR-16 fallback.
+            </p>
           </label>
           <label className="block">
             <Label htmlFor="wf-session">Academic session</Label>
@@ -468,7 +483,7 @@ export default function WorkflowEditor() {
         title="Set as the default workflow?"
         description={
           <>
-            Students with no program match resolve to <strong>{workflow.name}</strong> at
+            Students with no department match resolve to <strong>{workflow.name}</strong> at
             approval (ADR-16). The current default is cleared in the same write.
           </>
         }

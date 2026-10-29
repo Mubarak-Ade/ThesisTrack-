@@ -18,27 +18,34 @@ import FormMessage from '@/components/forms/FormMessage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { downloadCsv } from '@/lib/csv';
+import { useDepartments } from '@/features/departments/hooks/useDepartments';
 import { ApiError } from '@/lib/api/http';
 import { cn } from '@/lib/utils';
 import { ROLES } from '../data/constants';
 import type { ImportRow } from '../data/types';
 import { importUsers } from '../data/usersRepo';
 
-type TargetField = 'firstName' | 'lastName' | 'email' | 'role' | 'department' | 'program';
+type TargetField =
+  | 'firstName'
+  | 'lastName'
+  | 'email'
+  | 'role'
+  | 'registrationNumber'
+  | 'department';
 type Mapping = Record<TargetField, number | null>;
 type Step = 1 | 2 | 3 | 4;
 
 const REQUIRED: TargetField[] = ['firstName', 'lastName', 'email', 'role'];
-/** Optional §11.0.2 column — unmapped/blank rows simply omit the key. */
-const OPTIONAL: TargetField[] = ['department', 'program'];
+/** Optional columns — students still need a registration number at row validation. */
+const OPTIONAL: TargetField[] = ['registrationNumber', 'department'];
 
 const FIELD_LABEL: Record<TargetField, string> = {
   firstName: 'First name',
   lastName: 'Last name',
   email: 'Email',
   role: 'Role',
+  registrationNumber: 'Registration number',
   department: 'Department',
-  program: 'Program',
 };
 
 const STEPS: { step: Step; label: string }[] = [
@@ -49,6 +56,8 @@ const STEPS: { step: Step; label: string }[] = [
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** `FAC/YY/DEPT/NNNNN` — the API's student rule (design 2026-10-28). */
+const REGISTRATION_PATTERN = /^[A-Z]{2,4}\/\d{2}\/[A-Z]{2,4}\/\d{5}$/;
 
 /** Auto-guess header → target field from normalized header names. */
 function guessField(header: string): TargetField | '' {
@@ -57,8 +66,10 @@ function guessField(header: string): TargetField | '' {
   if (h.includes('first') || h === 'givenname') return 'firstName';
   if (h.includes('last') || h.includes('surname') || h === 'familyname') return 'lastName';
   if (h.includes('role')) return 'role';
+  if (h.includes('registration') || h.includes('matric') || h.includes('regno')) {
+    return 'registrationNumber';
+  }
   if (h.includes('dept') || h.includes('department')) return 'department';
-  if (h.includes('program')) return 'program';
   return '';
 }
 
@@ -68,8 +79,8 @@ function autoMap(headers: string[]): Mapping {
     lastName: null,
     email: null,
     role: null,
+    registrationNumber: null,
     department: null,
-    program: null,
   };
   headers.forEach((header, index) => {
     const target = guessField(header);
@@ -85,7 +96,16 @@ interface ValidatedRow {
   errors: string[];
 }
 
-function validateRows(rows: string[][], mapping: Mapping): ValidatedRow[] {
+/**
+ * `departmentCodes` maps a lower-cased managed department NAME to its code
+ * (`''` for a legacy row without one). Unknown names are refused here so the
+ * wizard points at the row instead of failing the whole POST later.
+ */
+function validateRows(
+  rows: string[][],
+  mapping: Mapping,
+  departmentCodes: Map<string, string>,
+): ValidatedRow[] {
   return rows.map((cells, offset) => {
     const errors: string[] = [];
     const pick = (field: TargetField): string => {
@@ -97,9 +117,9 @@ function validateRows(rows: string[][], mapping: Mapping): ValidatedRow[] {
     const lastName = pick('lastName');
     const email = pick('email').toLowerCase();
     const roleRaw = pick('role').toLowerCase();
+    const registrationNumber = pick('registrationNumber').toUpperCase();
     const department = pick('department');
-    // §11.0.2 delta — optional; blank cell means unaffiliated (ADR-16 fallback).
-    const program = pick('program');
+    const deptCode = department ? departmentCodes.get(department.toLowerCase()) : undefined;
 
     if (!firstName) errors.push('First name is required');
     if (!lastName) errors.push('Last name is required');
@@ -109,16 +129,30 @@ function validateRows(rows: string[][], mapping: Mapping): ValidatedRow[] {
     else if (!(ROLES as readonly string[]).includes(roleRaw)) {
       errors.push(`Unknown role "${pick('role')}" — expected Student, Supervisor or Administrator`);
     }
-    if (program.length > 255) errors.push('Program must be 255 characters or fewer');
+    if (roleRaw === 'student') {
+      if (!registrationNumber) {
+        errors.push('Registration number is required for students');
+      } else if (!REGISTRATION_PATTERN.test(registrationNumber)) {
+        errors.push('Use FAC/YY/DEPT/NNNNN, e.g. CST/22/SWE/00825');
+      } else if (deptCode && registrationNumber.split('/')[2] !== deptCode) {
+        errors.push(`DEPT must be ${deptCode} for ${department}`);
+      }
+    }
+    if (registrationNumber.length > 32) {
+      errors.push('Registration number must be 32 characters or fewer');
+    }
+    if (department && deptCode === undefined) {
+      errors.push(`Unknown department "${department}" — pick one from the managed list`);
+    }
 
     const values: ImportRow = {
       firstName,
       lastName,
       email,
       role: roleRaw as ImportRow['role'],
-      department,
     };
-    if (program) values.program = program;
+    if (registrationNumber) values.registrationNumber = registrationNumber;
+    if (department) values.department = department;
 
     return {
       index: offset + 1,
@@ -129,11 +163,21 @@ function validateRows(rows: string[][], mapping: Mapping): ValidatedRow[] {
   });
 }
 
-const TEMPLATE_HEADERS = ['firstName', 'lastName', 'email', 'role', 'department', 'program'];
+const TEMPLATE_HEADERS = [
+  'firstName',
+  'lastName',
+  'email',
+  'role',
+  'registrationNumber',
+  'department',
+];
 
 function sampleRows(count: number): (string | number)[][] {
-  const departments = ['Informatics', 'Computer Science', 'Software Engineering'];
-  const programs = ['MSc Computer Science', 'MSc Data Science', 'BSc Software Engineering'];
+  const departments = [
+    { name: 'Informatics', code: 'INF' },
+    { name: 'Data Science', code: 'DAT' },
+    { name: 'Cyber Security', code: 'CYB' },
+  ];
   const people = [
     ['Aisha', 'Bello'],
     ['Tomas', 'Novak'],
@@ -146,13 +190,17 @@ function sampleRows(count: number): (string | number)[][] {
   ];
   return Array.from({ length: count }, (_, i) => {
     const [first, last] = people[i % people.length];
+    const dept = departments[i % departments.length]!;
+    const role = i % 3 === 0 ? 'supervisor' : 'student';
     return [
       first,
       last,
       `${first[0].toLowerCase()}.${last.toLowerCase()}${i > 7 ? i : ''}@sample.edu`,
-      i % 3 === 0 ? 'supervisor' : 'student',
-      departments[i % departments.length],
-      i % 2 === 0 ? programs[i % programs.length] : '',
+      role,
+      role === 'student'
+        ? `CST/22/${dept.code}/${String(i + 1).padStart(5, '0')}`
+        : '',
+      dept.name,
     ];
   });
 }
@@ -171,21 +219,42 @@ export default function ImportWizard() {
     lastName: null,
     email: null,
     role: null,
+    registrationNumber: null,
     department: null,
-    program: null,
   });
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState<{ message: string; details?: unknown } | null>(null);
   const [createdCount, setCreatedCount] = useState<number | null>(null);
+  const { data: departmentPage } = useDepartments();
+  const departmentCodes = useMemo(
+    () =>
+      new Map(
+        (departmentPage?.items ?? []).map((department) => [
+          department.name.toLowerCase(),
+          department.code ?? '',
+        ]),
+      ),
+    [departmentPage],
+  );
 
-  const validated = useMemo(() => (step >= 3 ? validateRows(rows, mapping) : []), [step, rows, mapping]);
+  const validated = useMemo(
+    () => (step >= 3 ? validateRows(rows, mapping, departmentCodes) : []),
+    [step, rows, mapping, departmentCodes],
+  );
   const validCount = validated.filter((row) => row.values).length;
   const errorCount = validated.length - validCount;
   const allRequiredMapped = REQUIRED.every((field) => mapping[field] !== null);
 
   const downloadTemplate = () =>
     downloadCsv('thesistrack-import-template.csv', TEMPLATE_HEADERS, [
-      ['Marcus', 'Holloway', 'm.holloway@student.edu', 'student', 'Informatics', 'MSc Computer Science'],
+      [
+        'Marcus',
+        'Holloway',
+        'm.holloway@student.edu',
+        'student',
+        'CST/22/INF/00001',
+        'Informatics',
+      ],
     ]);
 
   const downloadSample = () =>
@@ -325,8 +394,8 @@ export default function ImportWizard() {
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
-                Required columns: first name, last name, email, role. Department and program are
-                optional.
+                Required columns: first name, last name, email, role. Registration number is required
+                for student rows; the department must match the managed list (optional).
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" onClick={downloadTemplate}>
@@ -438,7 +507,7 @@ export default function ImportWizard() {
                     <th scope="col" className="px-3 py-2.5 font-bold">Name</th>
                     <th scope="col" className="px-3 py-2.5 font-bold">Email</th>
                     <th scope="col" className="px-3 py-2.5 font-bold">Role</th>
-                    <th scope="col" className="px-3 py-2.5 font-bold">Program</th>
+                    <th scope="col" className="px-3 py-2.5 font-bold">Department</th>
                     <th scope="col" className="px-3 py-2.5 font-bold">Status</th>
                   </tr>
                 </thead>
@@ -466,10 +535,10 @@ export default function ImportWizard() {
                         {row.values?.role ?? row.cells[mapping.role ?? -1] ?? '—'}
                       </td>
                       <td className="px-3 py-2.5 text-muted-foreground">
-                        {row.values?.program ??
-                          (mapping.program === null
+                        {row.values?.department ??
+                          (mapping.department === null
                             ? '—'
-                            : row.cells[mapping.program]?.trim() || '—')}
+                            : row.cells[mapping.department]?.trim() || '—')}
                       </td>
                       <td className="px-3 py-2.5">
                         {row.errors.length === 0 ? (

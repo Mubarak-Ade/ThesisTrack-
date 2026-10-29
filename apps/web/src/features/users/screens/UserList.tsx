@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 
 import { downloadCsv } from '@/lib/csv';
 import { Button } from '@/components/ui/button';
-import { Download, UserPlus } from 'lucide-react';
+import { useDepartments } from '@/features/departments/hooks/useDepartments';
+import { AlertTriangle, Download, UserPlus } from 'lucide-react';
 import type { ConsoleStats, Role, UsersPage } from '../data/types';
 import { getStats, listUsers } from '../data/usersRepo';
 import Pagination from '@/components/ui/pagination';
@@ -37,11 +38,15 @@ export default function UserList() {
   const [q, setQ] = useState('');
   const [role, setRole] = useState<Role | undefined>(undefined);
   const [isActive, setIsActive] = useState<boolean | undefined>(undefined);
+  const [departmentId, setDepartmentId] = useState('');
+  const [missingRegistrationNumber, setMissingRegistrationNumber] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [sort, setSort] = useState<SortState>({ key: 'name', dir: 'asc' });
   const [data, setData] = useState<UsersPage | null>(null);
   const [stats, setStats] = useState<ConsoleStats | null>(null);
+  const [missingCount, setMissingCount] = useState(0);
+  const { data: departmentPage } = useDepartments();
 
   // Debounced search (350ms) — each keystroke only updates `search`.
   useEffect(() => {
@@ -51,13 +56,32 @@ export default function UserList() {
 
   useEffect(() => {
     let alive = true;
-    void listUsers({ q, role, isActive, page, limit }).then((next) => {
+    void listUsers({
+      q,
+      role,
+      isActive,
+      departmentId: departmentId || undefined,
+      missingRegistrationNumber: missingRegistrationNumber || undefined,
+      page,
+      limit,
+    }).then((next) => {
       if (alive) setData(next);
     });
     return () => {
       alive = false;
     };
-  }, [q, role, isActive, page, limit]);
+  }, [q, role, isActive, departmentId, missingRegistrationNumber, page, limit]);
+
+  // Grandfathering banner: how many students still lack a registration number.
+  useEffect(() => {
+    let alive = true;
+    void listUsers({ missingRegistrationNumber: true, page: 1, limit: 1 }).then((next) => {
+      if (alive) setMissingCount(next.total);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [data]);
 
   useEffect(() => {
     let alive = true;
@@ -97,6 +121,17 @@ export default function UserList() {
   const clearFilters = () => {
     setRole(undefined);
     setIsActive(undefined);
+    setDepartmentId('');
+    setMissingRegistrationNumber(false);
+    setPage(1);
+  };
+
+  /** Banner CTA: show exactly the students the API says are missing a number. */
+  const reviewMissingNumbers = () => {
+    setRole('student');
+    setMissingRegistrationNumber(true);
+    setDepartmentId('');
+    setIsActive(undefined);
     setPage(1);
   };
 
@@ -109,7 +144,7 @@ export default function UserList() {
         user.code ?? '',
         user.email,
         user.role,
-        user.department ?? '',
+        user.department?.name ?? '',
         user.status,
         user.lastLoginLabel ?? '',
       ]),
@@ -152,6 +187,25 @@ export default function UserList() {
       <div className="mt-6 space-y-4">
         {data?.usedFallback && <SampleDataBanner />}
 
+        {missingCount > 0 && (
+          <div
+            role="status"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+          >
+            <p className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>
+                <strong>{missingCount}</strong>{' '}
+                {missingCount === 1 ? 'student has' : 'students have'} no registration number.
+                Their accounts keep working; add a number when you edit each profile.
+              </span>
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={reviewMissingNumbers}>
+              Review students
+            </Button>
+          </div>
+        )}
+
         {stats && <StatCards stats={stats} />}
 
         <UsersToolbar
@@ -168,6 +222,17 @@ export default function UserList() {
           isActive={isActive}
           onIsActiveChange={(value) => {
             setIsActive(value);
+            setPage(1);
+          }}
+          departmentId={departmentId}
+          onDepartmentChange={(value) => {
+            setDepartmentId(value);
+            setPage(1);
+          }}
+          departments={departmentPage?.items ?? []}
+          missingRegistrationNumber={missingRegistrationNumber}
+          onMissingRegistrationNumberChange={(value) => {
+            setMissingRegistrationNumber(value);
             setPage(1);
           }}
           onClearFilters={clearFilters}

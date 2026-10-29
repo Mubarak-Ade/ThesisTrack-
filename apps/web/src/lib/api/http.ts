@@ -15,8 +15,8 @@ export interface PublicUser {
   createdAt: string;
   /** Present on §11.0.2 user objects; optional for older payloads/fixtures. */
   registrationNumber?: string | null;
-  /** §8.7 program — ADR-16's workflow match key; shown in Settings. */
-  program?: string | null;
+  /** Managed department (2026-10-28); `null` = unaffiliated. */
+  department?: { id: string; name: string; code: string | null } | null;
 }
 
 /** POST /auth/login and POST /auth/refresh answer with the same shape. */

@@ -10,6 +10,7 @@ import {
   mapUserDetail,
   mapUserDto,
   mapUsersPage,
+  resolveImportDepartments,
   toActivityItem,
   toCreateBody,
   toImportPayload,
@@ -25,8 +26,8 @@ const FULL_USER = {
   isActive: true,
   status: 'ACTIVE',
   createdAt: '2024-01-22T09:00:00.000Z',
-  registrationNumber: 'STU-2024-0117',
-  program: 'Computer Science',
+  registrationNumber: 'CST/22/INF/00117',
+  department: { id: 'dept-inf', name: 'Informatics', code: 'INF' },
 };
 
 describe('mapUserDto', () => {
@@ -42,8 +43,8 @@ describe('mapUserDto', () => {
       status: 'ACTIVE',
       isActive: true,
       createdAt: '2024-01-22T09:00:00.000Z',
-      registrationNumber: 'STU-2024-0117',
-      program: 'Computer Science',
+      registrationNumber: 'CST/22/INF/00117',
+      department: { id: 'dept-inf', name: 'Informatics', code: 'INF' },
     });
   });
 
@@ -70,15 +71,20 @@ describe('mapUserDto', () => {
     expect(user.lastName).toBe('');
     expect(user.createdAt).toBeNull();
     expect(user.registrationNumber).toBeNull();
-    expect(user.program).toBeNull(); // §11.0.2: absent → unaffiliated
+    expect(user.department).toBeNull(); // unaffiliated → ADR-16 default workflow
   });
 
-  it('reads the §11.0.2 program field defensively (null/empty/non-string → null)', () => {
-    expect(mapUserDto({ ...FULL_USER, program: 'Data Science' }).program).toBe('Data Science');
-    expect(mapUserDto({ ...FULL_USER, program: null }).program).toBeNull();
-    expect(mapUserDto({ ...FULL_USER, program: '' }).program).toBeNull();
-    expect(mapUserDto({ ...FULL_USER, program: 42 }).program).toBeNull();
-    expect(mapUserDto(FULL_USER).program).toBe('Computer Science');
+  it('reads the nested department defensively (absent/malformed → null)', () => {
+    expect(mapUserDto({ ...FULL_USER, department: null }).department).toBeNull();
+    expect(mapUserDto({ ...FULL_USER, department: 'Informatics' }).department).toBeNull();
+    expect(mapUserDto({ ...FULL_USER, department: { name: 'No id' } }).department).toBeNull();
+    // A legacy department row may have no code yet (PROPOSED ADR-11 backfill).
+    expect(mapUserDto({ ...FULL_USER, department: { id: 'd', name: 'Legacy', code: null } }).department).toEqual({
+      id: 'd',
+      name: 'Legacy',
+      code: null,
+    });
+    expect(mapUserDto(FULL_USER).department).toEqual({ id: 'dept-inf', name: 'Informatics', code: 'INF' });
   });
 
   it('prefers an explicit status over isActive', () => {
@@ -134,52 +140,93 @@ describe('detail / create / import mappers', () => {
 });
 
 describe('request-body builders', () => {
-  it('toCreateBody trims, lowercases, and drops UI-only fields', () => {
+  it('toCreateBody trims, lowercases, and carries the number and department id', () => {
     expect(
       toCreateBody({
         firstName: '  Anita ',
         lastName: 'Desai ',
         email: ' A.Desai@Student.EDU ',
         role: 'student',
-        department: 'Informatics',
+        registrationNumber: '  CST/22/INF/00117 ',
+        departmentId: '  dept-inf ',
       }),
-    ).toEqual({ firstName: 'Anita', lastName: 'Desai', email: 'a.desai@student.edu', role: 'student' });
+    ).toEqual({
+      firstName: 'Anita',
+      lastName: 'Desai',
+      email: 'a.desai@student.edu',
+      role: 'student',
+      registrationNumber: 'CST/22/INF/00117',
+      departmentId: 'dept-inf',
+    });
   });
 
-  it('toCreateBody carries a trimmed §11.0.2 program when one was given', () => {
-    expect(toCreateBody({ firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student', program: '  Data Science  ' })).toEqual(
+  it('toCreateBody omits the department key entirely when blank', () => {
+    const blank = toCreateBody({ firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student', departmentId: '   ' });
+    expect('departmentId' in blank).toBe(false);
+    const absent = toCreateBody({ firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student' });
+    expect('departmentId' in absent).toBe(false);
+  });
+
+  it('toCreateBody never sends the CSV department label', () => {
+    const body = toCreateBody({
+      firstName: 'A',
+      lastName: 'B',
+      email: 'a@b.edu',
+      role: 'student',
+      department: 'Informatics',
+      departmentId: 'dept-inf',
+    });
+    expect('department' in body).toBe(false);
+    expect(body.departmentId).toBe('dept-inf');
+  });
+
+  it('toImportPayload wraps rows as { users: [...] } (§A) with resolved ids', () => {
+    const payload = toImportPayload([
       {
         firstName: 'A',
         lastName: 'B',
         email: 'a@b.edu',
         role: 'student',
-        program: 'Data Science',
+        registrationNumber: 'CST/22/INF/00001',
+        departmentId: 'dept-inf',
       },
-    );
-  });
-
-  it('toCreateBody omits the program key entirely when blank (never `program: ""`)', () => {
-    const blank = toCreateBody({ firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student', program: '   ' });
-    expect('program' in blank).toBe(false);
-    const absent = toCreateBody({ firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student' });
-    expect('program' in absent).toBe(false);
-    expect(Object.keys(toCreateBody({ firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student', program: '' }))).not.toContain(
-      'program',
-    );
-  });
-
-  it('toImportPayload wraps rows as { users: [...] } (§A) and passes program per row', () => {
-    const payload = toImportPayload([
-      { firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student', department: 'X', program: 'MSc CS' },
-      { firstName: 'C', lastName: 'D', email: 'c@d.edu', role: 'supervisor', program: '  ' },
+      { firstName: 'C', lastName: 'D', email: 'c@d.edu', role: 'supervisor' },
     ]);
     expect(payload).toEqual({
       users: [
-        { firstName: 'A', lastName: 'B', email: 'a@b.edu', role: 'student', program: 'MSc CS' },
+        {
+          firstName: 'A',
+          lastName: 'B',
+          email: 'a@b.edu',
+          role: 'student',
+          registrationNumber: 'CST/22/INF/00001',
+          departmentId: 'dept-inf',
+        },
         { firstName: 'C', lastName: 'D', email: 'c@d.edu', role: 'supervisor' },
       ],
     });
-    expect('program' in payload.users[1]!).toBe(false);
+    expect('departmentId' in payload.users[1]!).toBe(false);
+  });
+
+  it('resolveImportDepartments matches names case-insensitively and reports unknown ones', () => {
+    const departments = [
+      { id: 'dept-inf', name: 'Informatics' },
+      { id: 'dept-cyb', name: 'Cyber Security' },
+    ];
+
+    const { resolved, unmatched } = resolveImportDepartments(
+      [
+        { firstName: 'A', lastName: 'One', email: 'a@x.edu', role: 'student', department: ' informatics ' },
+        { firstName: 'B', lastName: 'Two', email: 'b@x.edu', role: 'supervisor', department: 'Robotics' },
+        { firstName: 'C', lastName: 'Three', email: 'c@x.edu', role: 'supervisor' },
+      ],
+      departments,
+    );
+
+    expect(resolved[0]?.departmentId).toBe('dept-inf');
+    expect(resolved[1]?.departmentId).toBeUndefined(); // left unresolved, never guessed
+    expect(resolved[2]?.departmentId).toBeNull(); // blank → unaffiliated
+    expect(unmatched).toEqual([{ index: 1, department: 'Robotics' }]);
   });
 });
 
@@ -192,7 +239,12 @@ describe('withRails', () => {
       oversight: { lastLogin: '—', createdBy: '—', permissions: 'Student' },
       railsError: false,
     });
-    expect(detail.extras).toEqual({ department: null, phone: null, address: null, portalLanguage: null });
+    expect(detail.extras).toEqual({
+      department: 'Informatics',
+      phone: null,
+      address: null,
+      portalLanguage: null,
+    });
     expect(detail.milestones).toBe(4);
     expect(detail.railsError).toBe(false);
     expect(detail.theses).toEqual([]);

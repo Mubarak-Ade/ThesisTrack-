@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
+import type { Department } from '@/features/departments/data/types';
 import { ApiError } from '@/lib/api/http';
 import type { UserDetail } from '../data/types';
 import { getUser, sendInvite, updateUser } from '../data/usersRepo';
@@ -17,6 +18,31 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
+const INF: Department = {
+  id: '00000000-0000-4000-8000-000000000101',
+  name: 'Informatics',
+  code: 'INF',
+  archived: false,
+  archivedAt: null,
+  activeWorkflow: null,
+  studentCount: 4,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+};
+const DAT: Department = {
+  ...INF,
+  id: '00000000-0000-4000-8000-000000000105',
+  name: 'Data Science',
+  code: 'DAT',
+};
+
+vi.mock('@/features/departments/hooks/useDepartments', () => ({
+  useDepartments: () => ({
+    data: { items: [INF, DAT], total: 2, page: 1, limit: 100 },
+    isLoading: false,
+  }),
+}));
+
 import { toast } from 'sonner';
 
 const DETAIL: UserDetail = {
@@ -29,13 +55,12 @@ const DETAIL: UserDetail = {
   status: 'ACTIVE',
   isActive: true,
   createdAt: '2023-09-12T09:00:00.000Z',
-  registrationNumber: 'STU-2023-0457',
-  program: 'MSc Computer Science',
-  department: 'Informatics',
+  registrationNumber: 'CST/22/INF/00457',
+  department: { id: INF.id, name: INF.name, code: INF.code },
   lastLoginLabel: '5 hours ago',
   extras: {
     // No contact endpoint exists — the repo always returns nulls (honest `—`).
-    department: null,
+    department: 'Informatics',
     phone: null,
     address: null,
     portalLanguage: null,
@@ -84,8 +109,8 @@ describe('UserProfile (plan 6)', () => {
     expect(screen.getByText('Theses')).toBeInTheDocument();
     expect(screen.getByText('Milestones')).toBeInTheDocument();
     expect(screen.getByText('14')).toBeInTheDocument();
-    // Role line carries the §11.0.2 program (ADR-16 match key).
-    expect(screen.getByText(/Student • MSc Computer Science/)).toBeInTheDocument();
+    // Role line carries the managed department (the ADR-16 match key).
+    expect(screen.getByText(/Student • Informatics/)).toBeInTheDocument();
     // Contact card: live Member Since; no endpoint → em-dash phone/address rows.
     expect(screen.getByText('Member Since')).toBeInTheDocument();
     expect(screen.getByText('Send Direct Message')).toBeInTheDocument();
@@ -146,65 +171,132 @@ describe('UserProfile (plan 6)', () => {
   });
 });
 
-describe('UserProfile program edit (task 13.7 — §11.0.2 / ADR-16)', () => {
-  it('shows the program read-only with an Edit affordance and honest helper copy', async () => {
+describe('UserProfile enrollment edit (design 2026-10-28)', () => {
+  it('shows the number and managed department read-only with an Edit affordance', async () => {
     vi.mocked(getUser).mockResolvedValue(DETAIL);
 
     renderProfile();
 
-    expect(await screen.findByText('MSc Computer Science')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
-    expect(screen.getByText(/ADR-16: the student/)).toBeInTheDocument();
-    expect(screen.getByText(/blank = default workflow/)).toBeInTheDocument();
-    expect(screen.queryByLabelText('Program')).not.toBeInTheDocument();
+    expect((await screen.findAllByText('CST/22/INF/00457')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Informatics (INF)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit enrollment' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Department' })).not.toBeInTheDocument();
   });
 
-  it('saves an edited program through PATCH /users/:id', async () => {
+  it('saves the department id and a normalized registration number', async () => {
     vi.mocked(getUser).mockResolvedValue(DETAIL);
-    vi.mocked(updateUser).mockResolvedValue({ ...DETAIL, program: 'Data Science' });
+    vi.mocked(updateUser).mockResolvedValue({
+      ...DETAIL,
+      registrationNumber: 'CST/22/DAT/00999',
+      department: { id: DAT.id, name: DAT.name, code: DAT.code },
+    });
 
     renderProfile();
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-    fireEvent.change(screen.getByLabelText('Program'), { target: { value: 'Data Science' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit enrollment' }));
+    fireEvent.change(screen.getByLabelText(/Registration number/i), {
+      target: { value: ' cst/22/dat/00999 ' },
+    });
+    fireEvent.change(screen.getByLabelText('Department'), { target: { value: DAT.id } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith(DETAIL.id, { program: 'Data Science' }),
+      expect(updateUser).toHaveBeenCalledWith(DETAIL.id, {
+        registrationNumber: 'CST/22/DAT/00999',
+        departmentId: DAT.id,
+      }),
     );
-    expect(toast.success).toHaveBeenCalledWith('Program updated');
-    // Back to read-only with the stored value.
-    expect(await screen.findByText('Data Science')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    expect(toast.success).toHaveBeenCalledWith('Enrollment details updated');
   });
 
-  it('clears the program (sends null) when the field is saved blank', async () => {
+  it('refuses a DEPT segment that does not match the selected department', async () => {
     vi.mocked(getUser).mockResolvedValue(DETAIL);
-    vi.mocked(updateUser).mockResolvedValue({ ...DETAIL, program: null });
 
     renderProfile();
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-    fireEvent.change(screen.getByLabelText('Program'), { target: { value: '   ' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit enrollment' }));
+    fireEvent.change(screen.getByLabelText('Department'), { target: { value: DAT.id } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(updateUser).toHaveBeenCalledWith(DETAIL.id, { program: null }));
-    expect(toast.success).toHaveBeenCalledWith('Program updated');
+    expect(
+      await screen.findByText('The DEPT segment must be DAT for the selected department'),
+    ).toBeInTheDocument();
+    expect(updateUser).not.toHaveBeenCalled();
   });
 
-  it('surfaces a failed program PATCH inline and never fakes success (Rule 3)', async () => {
+  it('refuses a malformed student number', async () => {
+    vi.mocked(getUser).mockResolvedValue(DETAIL);
+
+    renderProfile();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit enrollment' }));
+    fireEvent.change(screen.getByLabelText(/Registration number/i), {
+      target: { value: 'STU-2023-0457' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(
+      await screen.findByText('Use FAC/YY/DEPT/NNNNN, e.g. CST/22/SWE/00825'),
+    ).toBeInTheDocument();
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
+  it('never clears a student registration number', async () => {
+    vi.mocked(getUser).mockResolvedValue(DETAIL);
+
+    renderProfile();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit enrollment' }));
+    fireEvent.change(screen.getByLabelText(/Registration number/i), { target: { value: '  ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(
+      await screen.findByText('Registration number is required for students'),
+    ).toBeInTheDocument();
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
+  it('lets a supervisor save an arbitrary staff number and clear it', async () => {
+    const SUP: UserDetail = {
+      ...DETAIL,
+      role: 'supervisor',
+      registrationNumber: null,
+      department: null,
+    };
+    vi.mocked(getUser).mockResolvedValue(SUP);
+    vi.mocked(updateUser).mockResolvedValue({ ...SUP, registrationNumber: 'STAFF-0042' });
+
+    renderProfile();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit enrollment' }));
+    fireEvent.change(screen.getByLabelText(/Registration number/i), {
+      target: { value: 'staff-0042' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(DETAIL.id, {
+        registrationNumber: 'STAFF-0042',
+        departmentId: null,
+      }),
+    );
+    expect(toast.success).toHaveBeenCalledWith('Enrollment details updated');
+  });
+
+  it('surfaces a failed PATCH inline and never fakes success (Rule 3)', async () => {
     vi.mocked(getUser).mockResolvedValue(DETAIL);
     vi.mocked(updateUser).mockRejectedValue(
-      new ApiError({ status: 422, code: 'VALIDATION', message: 'Program is too long' }),
+      new ApiError({
+        status: 422,
+        code: 'BUSINESS_RULE_VIOLATION',
+        message: 'Registration number is already in use',
+      }),
     );
 
     renderProfile();
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-    fireEvent.change(screen.getByLabelText('Program'), { target: { value: 'Data Science' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit enrollment' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(await screen.findByText('Program is too long')).toBeInTheDocument();
-    // The editor stays open on the entered value — no optimistic success.
+    expect(
+      await screen.findByText('Registration number is already in use'),
+    ).toBeInTheDocument();
+    // The editor stays open — no optimistic success.
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Program')).toHaveValue('Data Science');
     expect(toast.success).not.toHaveBeenCalled();
   });
 
@@ -213,11 +305,11 @@ describe('UserProfile program edit (task 13.7 — §11.0.2 / ADR-16)', () => {
     vi.mocked(updateUser).mockRejectedValue(new Error('offline'));
 
     renderProfile();
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit enrollment' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(
-      await screen.findByText(/unable to save the program/i),
+      await screen.findByText(/unable to save enrollment details/i),
     ).toBeInTheDocument();
     expect(toast.success).not.toHaveBeenCalled();
   });

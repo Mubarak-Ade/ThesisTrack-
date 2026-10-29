@@ -11,6 +11,7 @@ export interface PreviewValues {
   lastName: string;
   email: string;
   role: string;
+  registrationNumber: string;
   department: string;
 }
 
@@ -80,7 +81,11 @@ export default function AccountPreview({ values }: { values: PreviewValues }) {
             <dt className="font-semibold uppercase tracking-wider text-muted-foreground">
               Enrollment ID
             </dt>
-            <dd className="text-muted-foreground italic">TBD</dd>
+            <dd
+              className={values.registrationNumber ? 'text-foreground' : 'text-muted-foreground italic'}
+            >
+              {values.registrationNumber || 'TBD'}
+            </dd>
           </div>
           <div className="flex items-center justify-between gap-3">
             <dt className="font-semibold uppercase tracking-wider text-muted-foreground">Status</dt>

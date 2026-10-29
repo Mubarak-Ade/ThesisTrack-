@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import type { DepartmentRef } from '@/features/departments/data/types';
 import type { Role } from '../data/types';
 import { PAGE_SIZES } from '@/components/ui/pagination';
 
@@ -29,6 +30,13 @@ interface UsersToolbarProps {
   onRoleChange: (role: Role | undefined) => void;
   isActive: boolean | undefined;
   onIsActiveChange: (value: boolean | undefined) => void;
+  /** Managed department filter (design 2026-10-28). */
+  departmentId: string;
+  onDepartmentChange: (departmentId: string) => void;
+  departments: DepartmentRef[];
+  /** Grandfathering view: students without a registration number. */
+  missingRegistrationNumber: boolean;
+  onMissingRegistrationNumberChange: (value: boolean) => void;
   onClearFilters: () => void;
   /** `Show: [N Rows]` row-size control (spec §5.2). */
   limit: number;
@@ -42,13 +50,22 @@ export default function UsersToolbar({
   onRoleChange,
   isActive,
   onIsActiveChange,
+  departmentId,
+  onDepartmentChange,
+  departments,
+  missingRegistrationNumber,
+  onMissingRegistrationNumberChange,
   onClearFilters,
   limit,
   onLimitChange,
 }: UsersToolbarProps) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
-  const activeFilters = (role ? 1 : 0) + (isActive !== undefined ? 1 : 0);
+  const activeFilters =
+    (role ? 1 : 0) +
+    (isActive !== undefined ? 1 : 0) +
+    (departmentId ? 1 : 0) +
+    (missingRegistrationNumber ? 1 : 0);
 
   // Close the filters popover on outside click / Escape.
   useEffect(() => {
@@ -159,6 +176,37 @@ export default function UsersToolbar({
                     </option>
                   ))}
                 </select>
+              </label>
+
+              <label className="mt-3 block text-sm font-medium text-foreground">
+                Department
+                <select
+                  value={departmentId}
+                  onChange={(event) => onDepartmentChange(event.target.value)}
+                  className={`${SELECT_CLASS} mt-1.5`}
+                >
+                  <option value="">All departments</option>
+                  {departments.map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {department.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="mt-3 flex items-start gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={missingRegistrationNumber}
+                  onChange={(event) => onMissingRegistrationNumberChange(event.target.checked)}
+                  className="mt-0.5 size-4 shrink-0 accent-primary"
+                />
+                <span>
+                  Missing registration number
+                  <span className="block text-xs text-muted-foreground">
+                    Students only — the grandfathering list.
+                  </span>
+                </span>
               </label>
 
               <Button type="button" variant="ghost" size="sm" className="mt-3 w-full" onClick={onClearFilters}>

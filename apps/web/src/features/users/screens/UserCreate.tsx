@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowLeft, Mail, Rocket, ShieldCheck, UserRound, X } from 'lucide-react';
+import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -10,45 +11,88 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useDepartments } from '@/features/departments/hooks/useDepartments';
 import { ApiError } from '@/lib/api/http';
 import AccountPreview from '../components/AccountPreview';
-import { DEPARTMENTS, ROLES } from '../data/constants';
+import { ROLES } from '../data/constants';
 import type { CreateUserInput, Role } from '../data/types';
 import { createUser } from '../data/usersRepo';
 
-/** Mirrors the pinned create contract (§A): name/email/role, + optional §11.0.2 program. */
-const createSchema = z.object({
-  firstName: z
-    .string()
-    .trim()
-    .min(1, 'First name is required')
-    .max(255, 'First name must be 255 characters or fewer'),
-  lastName: z
-    .string()
-    .trim()
-    .min(1, 'Last name is required')
-    .max(255, 'Last name must be 255 characters or fewer'),
-  email: z
-    .string()
-    .trim()
-    .min(1, 'Email is required')
-    .email('Enter a valid email address')
-    .max(255, 'Email must be 255 characters or fewer'),
-  role: z.string().refine((value) => (ROLES as readonly string[]).includes(value), 'Select a role'),
-  department: z.string(),
-  // §11.0.2 delta — optional; blank = unaffiliated (ADR-16 default workflow).
-  program: z.string().trim().max(255, 'Program must be 255 characters or fewer'),
-  sendInvite: z.boolean(),
-  enforcePasswordChange: z.boolean(),
-});
-
-type CreateForm = z.infer<typeof createSchema>;
-
-const LABEL_CLASS =
-  'text-xs font-semibold uppercase tracking-wider text-muted-foreground';
+/** `FAC/YY/DEPT/NNNNN` — the shape the API stores (design 2026-10-28). */
+const REGISTRATION_PATTERN = /^[A-Z]{2,4}\/\d{2}\/[A-Z]{2,4}\/\d{5}$/;
 
 const SELECT_CLASS =
   'flex h-11 w-full rounded-md border border-input bg-white px-3 py-2 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1';
+
+/**
+ * Mirrors the create contract. A student always needs a well-formed
+ * registration number; when a department is chosen, its DEPT segment must be
+ * that department's code (client-side mirror of the API's 422 rule).
+ */
+function buildSchema(departmentCodes: Map<string, string>) {
+  return z
+    .object({
+      firstName: z
+        .string()
+        .trim()
+        .min(1, 'First name is required')
+        .max(255, 'First name must be 255 characters or fewer'),
+      lastName: z
+        .string()
+        .trim()
+        .min(1, 'Last name is required')
+        .max(255, 'Last name must be 255 characters or fewer'),
+      email: z
+        .string()
+        .trim()
+        .min(1, 'Email is required')
+        .email('Enter a valid email address')
+        .max(255, 'Email must be 255 characters or fewer'),
+      role: z.string().refine((value) => (ROLES as readonly string[]).includes(value), 'Select a role'),
+      registrationNumber: z
+        .string()
+        .trim()
+        .max(32, 'Registration number must be 32 characters or fewer'),
+      departmentId: z.string(),
+      sendInvite: z.boolean(),
+      enforcePasswordChange: z.boolean(),
+    })
+    .superRefine((values, ctx) => {
+      const number = values.registrationNumber.trim().toUpperCase();
+      // Always required for students; supervisors may optionally have a staff
+      // registration number, and administrators normally have none.
+      if (values.role !== 'student') return;
+      if (!number) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['registrationNumber'],
+          message: 'Registration number is required for students',
+        });
+        return;
+      }
+      if (!REGISTRATION_PATTERN.test(number)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['registrationNumber'],
+          message: 'Use FAC/YY/DEPT/NNNNN, e.g. CST/22/SWE/00825',
+        });
+        return;
+      }
+      const code = departmentCodes.get(values.departmentId);
+      if (code && number.split('/')[2] !== code) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['registrationNumber'],
+          message: `The DEPT segment must be ${code} for the selected department`,
+        });
+      }
+    });
+}
+
+type CreateForm = z.infer<ReturnType<typeof buildSchema>>;
+
+const LABEL_CLASS =
+  'text-xs font-semibold uppercase tracking-wider text-muted-foreground';
 
 /** Icon + bold title + uppercase kicker beneath + hairline rule (spec §5.3). */
 function SectionHead({
@@ -78,19 +122,31 @@ function SectionHead({
   );
 }
 
-/** Create User Account (spec §5.3) — live `POST /users` write, UI-only extras. */
+/** Create User Account (spec §5.3) — live `POST /users` write. */
 export default function UserCreate() {
   const navigate = useNavigate();
+  const { data: departmentPage, isLoading: departmentsLoading } = useDepartments();
+  const departments = useMemo(() => departmentPage?.items ?? [], [departmentPage]);
+  const departmentCodes = useMemo(
+    () =>
+      new Map(
+        departments
+          .filter((department): department is typeof department & { code: string } => !!department.code)
+          .map((department) => [department.id, department.code]),
+      ),
+    [departments],
+  );
+  const schema = useMemo(() => buildSchema(departmentCodes), [departmentCodes]);
 
   const form = useForm<CreateForm>({
-    resolver: zodResolver(createSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       firstName: '',
       lastName: '',
       email: '',
       role: '',
-      department: '',
-      program: '',
+      registrationNumber: '',
+      departmentId: '',
       // Both onboarding cards default-checked (spec §5.3).
       sendInvite: true,
       enforcePasswordChange: true,
@@ -104,11 +160,9 @@ export default function UserCreate() {
         lastName: values.lastName,
         email: values.email,
         role: values.role as Role,
-        // UI-only — dropped again by the repo's toCreateBody (§A).
-        department: values.department || undefined,
+        registrationNumber: values.registrationNumber || undefined,
+        departmentId: values.departmentId || undefined,
       };
-      // §11.0.2: blank program stays off the wire (unaffiliated → default workflow).
-      if (values.program) input.program = values.program;
       const created = await createUser(input);
       // §A: create auto-provisions the invitation — the toggle only shapes
       // which confirmation the operator sees.
@@ -254,6 +308,30 @@ export default function UserCreate() {
                     </p>
                     {fieldError('email')}
                   </div>
+
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="uc-registration" className={LABEL_CLASS}>
+                      Registration Number
+                      {watched.role === 'student' ? (
+                        <span className="text-danger"> *</span>
+                      ) : (
+                        <span className="normal-case tracking-normal text-muted-foreground"> (optional)</span>
+                      )}
+                    </Label>
+                    <Input
+                      id="uc-registration"
+                      placeholder="e.g. CST/22/SWE/00825"
+                      maxLength={32}
+                      aria-invalid={!!errors.registrationNumber}
+                      {...form.register('registrationNumber')}
+                    />
+                    <p className="text-xs italic text-muted-foreground">
+                      {watched.role === 'student'
+                        ? 'Required for students — FAC/YY/DEPT/NNNNN, where DEPT is the department code.'
+                        : 'Optional for supervisors and administrators; any staff number is accepted.'}
+                    </p>
+                    {fieldError('registrationNumber')}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -291,32 +369,28 @@ export default function UserCreate() {
                     <Label htmlFor="uc-department" className={LABEL_CLASS}>
                       Academic Department
                     </Label>
-                    <select id="uc-department" className={SELECT_CLASS} {...form.register('department')}>
-                      <option value="">Not Selected</option>
-                      {DEPARTMENTS.map((department) => (
-                        <option key={department} value={department}>
-                          {department}
+                    <select
+                      id="uc-department"
+                      className={SELECT_CLASS}
+                      disabled={departmentsLoading}
+                      aria-invalid={!!errors.departmentId}
+                      {...form.register('departmentId')}
+                    >
+                      <option value="">
+                        {departmentsLoading ? 'Loading departments…' : 'Unaffiliated (default workflow)'}
+                      </option>
+                      {departments.map((department) => (
+                        <option key={department.id} value={department.id}>
+                          {department.name}
+                          {department.code ? ` (${department.code})` : ''}
                         </option>
                       ))}
                     </select>
-                  </div>
-
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="uc-program" className={LABEL_CLASS}>
-                      Program
-                    </Label>
-                    <Input
-                      id="uc-program"
-                      placeholder="e.g. MSc Computer Science"
-                      maxLength={255}
-                      aria-invalid={!!errors.program}
-                      {...form.register('program')}
-                    />
                     <p className="text-xs italic text-muted-foreground">
-                      Optional — departmental program used to pick the student&apos;s workflow
-                      (ADR-16). Leave blank for unaffiliated: the default workflow applies.
+                      The managed list also picks the student&apos;s workflow (ADR-16). Leave blank for
+                      unaffiliated: the default workflow applies.
                     </p>
-                    {fieldError('program')}
+                    {fieldError('departmentId')}
                   </div>
                 </div>
               </CardContent>
@@ -401,7 +475,9 @@ export default function UserCreate() {
                 lastName: watched.lastName ?? '',
                 email: watched.email ?? '',
                 role: watched.role ?? '',
-                department: watched.department ?? '',
+                registrationNumber: watched.registrationNumber ?? '',
+                department:
+                  departments.find((department) => department.id === watched.departmentId)?.name ?? '',
               }}
             />
           </div>

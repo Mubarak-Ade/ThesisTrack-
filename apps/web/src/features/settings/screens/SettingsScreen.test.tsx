@@ -26,7 +26,7 @@ const USER: PublicUser = {
   isActive: true,
   createdAt: '2026-09-01T00:00:00.000Z',
   registrationNumber: 'STU-2026-0001',
-  program: 'Computer Science',
+  department: { id: 'd-1', name: 'Computer Science', code: 'CSC' },
 };
 
 const renderScreen = () =>
@@ -61,7 +61,7 @@ describe('SettingsScreen', () => {
 
   it('shows an em dash for fields the API never received', async () => {
     vi.mocked(getProfile).mockResolvedValue({
-      user: { ...USER, program: null, registrationNumber: null },
+      user: { ...USER, registrationNumber: null, department: null },
       usedFallback: false,
     });
     renderScreen();

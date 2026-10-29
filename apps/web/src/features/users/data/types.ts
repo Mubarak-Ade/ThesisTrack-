@@ -2,6 +2,7 @@
  * Stable internal models for the console's user-management data (spec §4).
  * Screens consume these types only — raw API DTOs never leave `data/`.
  */
+import type { DepartmentRef } from '@/features/departments/data/types';
 
 export type Role = 'student' | 'supervisor' | 'administrator';
 /** `coordinator` exists only in display fixtures — the API cannot produce it. */
@@ -21,12 +22,10 @@ export interface ConsoleUser {
   createdAt: string | null;
   registrationNumber: string | null;
   /**
-   * §11.0.2 PROPOSED delta — the ADR-16 workflow auto-match key. Absent from
-   * older payloads/fixtures → mapped to `null` (unaffiliated: default workflow).
+   * Managed department (design 2026-10-28 — PROPOSED ADR-11 reversal). The
+   * nested reference is the ADR-16 workflow match key; `null` = unaffiliated.
    */
-  program: string | null;
-  /** Fixture-only hints (department shown in tables/rails). */
-  department?: string;
+  department: DepartmentRef | null;
   /** Fixture-only relative label ("2 hours ago") — live rows show "—" . */
   lastLoginLabel?: string;
 }
@@ -92,10 +91,10 @@ export interface CreateUserInput {
   lastName: string;
   email: string;
   role: Role;
-  /** UI-only — the API's create schema has no department field (§A). */
-  department?: string;
-  /** Optional §11.0.2 delta — blank/absent means unaffiliated (ADR-16 fallback). */
-  program?: string | null;
+  /** Required for students by the API; optional for supervisors. */
+  registrationNumber?: string | null;
+  /** Managed department; blank/absent = unaffiliated (ADR-16 default). */
+  departmentId?: string | null;
 }
 
 export interface ImportRow {
@@ -103,9 +102,12 @@ export interface ImportRow {
   lastName: string;
   email: string;
   role: Role;
+  /** Required for student rows by the API; optional for supervisors. */
+  registrationNumber?: string | null;
+  /** CSV department NAME — the repo resolves it to an id before posting. */
   department?: string;
-  /** Optional §11.0.2 delta — blank/absent means unaffiliated (ADR-16 fallback). */
-  program?: string | null;
+  /** Filled by `resolveImportDepartments`; never supplied by the CSV. */
+  departmentId?: string | null;
 }
 
 export interface CreatedUser {
@@ -113,9 +115,10 @@ export interface CreatedUser {
   status: UserStatus;
 }
 
-/** Partial `PATCH /users/:id` body — §11.0.2 delta (`null` clears `program`). */
+/** Partial `PATCH /users/:id` body — all keys optional; `null` clears a field. */
 export interface UpdateUserInput {
-  program: string | null;
+  registrationNumber?: string | null;
+  departmentId?: string | null;
 }
 
 export interface ImportResult {
@@ -127,6 +130,10 @@ export interface ListUsersArgs {
   role?: Role;
   /** Exact state filter — maps to the API's `isActive=true|false`. */
   isActive?: boolean;
+  /** Managed department filter. */
+  departmentId?: string;
+  /** Grandfathering banner: students with no registration number. */
+  missingRegistrationNumber?: boolean;
   page: number;
   limit: number;
 }

@@ -24,7 +24,7 @@ const USER_1 = {
   lastName: 'Holloway',
   email: 'm.holloway@university.edu',
   role: 'student',
-  program: 'Informatics',
+  department: { id: 'd-1', name: 'Informatics', code: 'INF' },
   isActive: true,
   createdAt: '2023-09-12T09:00:00.000Z',
 };
@@ -35,7 +35,7 @@ const USER_2 = {
   lastName: 'Jenkins',
   email: 's.jenkins@university.edu',
   role: 'student',
-  program: null,
+  department: null,
   isActive: false,
   createdAt: 'not-a-date',
 };

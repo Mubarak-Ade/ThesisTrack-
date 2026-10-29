@@ -40,7 +40,15 @@ describe('listUsers', () => {
       pagination: { page: 2, limit: 20, total: 41 },
     });
 
-    const page = await listUsers({ q: 'ali z', role: 'student', isActive: true, page: 2, limit: 20 });
+    const page = await listUsers({
+      q: 'ali z',
+      role: 'student',
+      isActive: true,
+      departmentId: '00000000-0000-4000-8000-000000000101',
+      missingRegistrationNumber: true,
+      page: 2,
+      limit: 20,
+    });
 
     expect(page.usedFallback).toBe(false);
     expect(page.total).toBe(41);
@@ -50,6 +58,8 @@ describe('listUsers', () => {
     expect(url).toContain('q=ali+z');
     expect(url).toContain('role=student');
     expect(url).toContain('isActive=true');
+    expect(url).toContain('departmentId=00000000-0000-4000-8000-000000000101');
+    expect(url).toContain('missingRegistrationNumber=true');
     expect(url).toContain('page=2');
   });
 
@@ -71,6 +81,22 @@ describe('listUsers', () => {
 
     expect(page.usedFallback).toBe(true);
     expect(page.items.map((u) => u.email)).toEqual(['s.jenkins@student.edu', 'i.musa@student.edu']);
+  });
+
+  it('filters fallback fixtures by department and by a missing registration number', async () => {
+    get.mockRejectedValue(new Error('network down'));
+
+    const byDepartment = await listUsers({
+      departmentId: '00000000-0000-4000-8000-000000000104',
+      page: 1,
+      limit: 50,
+    });
+    expect(byDepartment.items.every((u) => u.department?.name === 'Architecture')).toBe(true);
+
+    const missing = await listUsers({ missingRegistrationNumber: true, page: 1, limit: 50 });
+    expect(missing.items.length).toBeGreaterThan(0);
+    expect(missing.items.every((u) => u.role === 'student' && u.registrationNumber === null)).toBe(true);
+    expect(missing.items.map((u) => u.email)).toContain('s.jenkins@student.edu');
   });
 });
 
@@ -206,7 +232,7 @@ describe('getUser', () => {
 });
 
 describe('writes', () => {
-  it('createUser posts the 4-field body (department dropped) and maps the result', async () => {
+  it('createUser posts the registration number and department id, then maps the result', async () => {
     post.mockResolvedValue({ user: { ...MARCUS }, status: 'INVITED' });
 
     const created = await createUser({
@@ -214,7 +240,8 @@ describe('writes', () => {
       lastName: 'Student',
       email: 'new@student.edu',
       role: 'student',
-      department: 'Informatics',
+      registrationNumber: ' CST/22/INF/00001 ',
+      departmentId: ' 00000000-0000-4000-8000-000000000101 ',
     });
 
     expect(post).toHaveBeenCalledWith('/users', {
@@ -222,9 +249,30 @@ describe('writes', () => {
       lastName: 'Student',
       email: 'new@student.edu',
       role: 'student',
+      registrationNumber: 'CST/22/INF/00001',
+      departmentId: '00000000-0000-4000-8000-000000000101',
     });
     expect(created.status).toBe('INVITED');
     expect(created.user.email).toBe('m.holloway@student.edu');
+  });
+
+  it('createUser omits a blank department instead of sending an empty id', async () => {
+    post.mockResolvedValue({ user: { ...MARCUS }, status: 'INVITED' });
+
+    await createUser({
+      firstName: 'New',
+      lastName: 'Student',
+      email: 'new@student.edu',
+      role: 'supervisor',
+      departmentId: '   ',
+    });
+
+    expect(post).toHaveBeenCalledWith('/users', {
+      firstName: 'New',
+      lastName: 'Student',
+      email: 'new@student.edu',
+      role: 'supervisor',
+    });
   });
 
   it('createUser surfaces API errors instead of faking success (Rule 3)', async () => {
@@ -236,26 +284,6 @@ describe('writes', () => {
     ).rejects.toBeInstanceOf(ApiError);
   });
 
-  it('createUser forwards the optional §11.0.2 program, trimmed', async () => {
-    post.mockResolvedValue({ user: { ...MARCUS, program: 'Data Science' }, status: 'INVITED' });
-
-    await createUser({
-      firstName: 'New',
-      lastName: 'Student',
-      email: 'new@student.edu',
-      role: 'student',
-      program: '  Data Science  ',
-    });
-
-    expect(post).toHaveBeenCalledWith('/users', {
-      firstName: 'New',
-      lastName: 'Student',
-      email: 'new@student.edu',
-      role: 'student',
-      program: 'Data Science',
-    });
-  });
-
   it('sendInvite posts to the re-send endpoint', async () => {
     post.mockResolvedValue({ user: { ...MARCUS }, status: 'INVITED' });
     const result = await sendInvite(MARCUS.id);
@@ -263,24 +291,70 @@ describe('writes', () => {
     expect(result.status).toBe('INVITED');
   });
 
-  it('importUsers posts { users: [...] } and reads `created`', async () => {
-    post.mockResolvedValue({ created: 3, users: [] });
+  it('importUsers resolves CSV department names against the managed list, then posts ids', async () => {
+    get.mockResolvedValue({
+      departments: [
+        { id: 'dept-inf', name: 'Informatics', code: 'INF' },
+        { id: 'dept-cyb', name: 'Cyber Security', code: 'CYB' },
+      ],
+      pagination: { page: 1, limit: 100, total: 2 },
+    });
+    post.mockResolvedValue({ created: 2, users: [] });
+
     const result = await importUsers([
-      { firstName: 'A', lastName: 'One', email: 'one@x.edu', role: 'student' },
-      { firstName: 'B', lastName: 'Two', email: 'two@x.edu', role: 'supervisor', department: 'X' },
-      { firstName: 'C', lastName: 'Three', email: 'three@x.edu', role: 'student', program: 'MSc CS' },
+      {
+        firstName: 'A',
+        lastName: 'One',
+        email: 'one@x.edu',
+        role: 'student',
+        registrationNumber: 'CST/22/INF/00001',
+        department: 'informatics', // case-insensitive
+      },
+      { firstName: 'B', lastName: 'Two', email: 'two@x.edu', role: 'supervisor' },
     ]);
+
+    expect(get).toHaveBeenCalledWith('/departments?page=1&limit=100');
     expect(post).toHaveBeenCalledWith('/users/import', {
       users: [
-        { firstName: 'A', lastName: 'One', email: 'one@x.edu', role: 'student' },
-        { firstName: 'B', lastName: 'Two', email: 'two@x.edu', role: 'supervisor' },
-        { firstName: 'C', lastName: 'Three', email: 'three@x.edu', role: 'student', program: 'MSc CS' },
+        {
+          firstName: 'A',
+          lastName: 'One',
+          email: 'one@x.edu',
+          role: 'student',
+          registrationNumber: 'CST/22/INF/00001',
+          departmentId: 'dept-inf',
+        },
+        {
+          firstName: 'B',
+          lastName: 'Two',
+          email: 'two@x.edu',
+          role: 'supervisor',
+        },
       ],
     });
-    expect(result.created).toBe(3);
+    expect(result.created).toBe(2);
+  });
+
+  it('importUsers refuses an unknown department before posting any row', async () => {
+    get.mockResolvedValue({
+      departments: [{ id: 'dept-inf', name: 'Informatics', code: 'INF' }],
+      pagination: { page: 1, limit: 100, total: 1 },
+    });
+
+    await expect(
+      importUsers([
+        { firstName: 'A', lastName: 'One', email: 'one@x.edu', role: 'supervisor', department: 'Robotics' },
+        { firstName: 'B', lastName: 'Two', email: 'two@x.edu', role: 'supervisor', department: 'Informatics' },
+      ]),
+    ).rejects.toMatchObject({
+      status: 422,
+      details: [{ path: 'users[0].department', message: 'Unknown department "Robotics"' }],
+    });
+    expect(post).not.toHaveBeenCalled();
   });
 
   it('importUsers rejects on 422 so the wizard can show row errors', async () => {
+    get.mockResolvedValue({ departments: [], pagination: { page: 1, limit: 100, total: 0 } });
     post.mockRejectedValue(
       new ApiError({ status: 422, code: 'VALIDATION', message: '2 rows invalid', details: [{ row: 2 }] }),
     );
@@ -289,31 +363,29 @@ describe('writes', () => {
     );
   });
 
-  it('updateUser PATCHes { program } and maps the row the server stored', async () => {
-    patch.mockResolvedValue({ user: { ...MARCUS, program: 'Data Science' } });
+  it('updateUser PATCHes { departmentId } and maps the row the server stored', async () => {
+    patch.mockResolvedValue({ user: { ...MARCUS, department: { id: 'dept-dat', name: 'Data Science', code: 'DAT' } } });
 
-    const updated = await updateUser(MARCUS.id, { program: 'Data Science' });
+    const updated = await updateUser(MARCUS.id, { departmentId: 'dept-dat' });
 
-    expect(patch).toHaveBeenCalledWith(`/users/${MARCUS.id}`, { program: 'Data Science' });
-    expect(updated.program).toBe('Data Science');
+    expect(patch).toHaveBeenCalledWith(`/users/${MARCUS.id}`, { departmentId: 'dept-dat' });
+    expect(updated.department).toEqual({ id: 'dept-dat', name: 'Data Science', code: 'DAT' });
     expect(updated.email).toBe('m.holloway@student.edu');
   });
 
-  it('updateUser clears the program by sending null (unaffiliated)', async () => {
-    patch.mockResolvedValue({ user: { ...MARCUS, program: null } });
+  it('updateUser clears the department by sending null (unaffiliated)', async () => {
+    patch.mockResolvedValue({ user: { ...MARCUS, department: null } });
 
-    const updated = await updateUser(MARCUS.id, { program: null });
+    const updated = await updateUser(MARCUS.id, { departmentId: null });
 
-    expect(patch).toHaveBeenCalledWith(`/users/${MARCUS.id}`, { program: null });
-    expect(updated.program).toBeNull();
+    expect(patch).toHaveBeenCalledWith(`/users/${MARCUS.id}`, { departmentId: null });
+    expect(updated.department).toBeNull();
   });
 
   it('updateUser surfaces PATCH errors instead of faking success (Rule 3)', async () => {
     patch.mockRejectedValue(
-      new ApiError({ status: 422, code: 'VALIDATION', message: 'Program is too long' }),
+      new ApiError({ status: 422, code: 'BUSINESS_RULE_VIOLATION', message: 'Department code does not match' }),
     );
-    await expect(updateUser(MARCUS.id, { program: 'x'.repeat(300) })).rejects.toBeInstanceOf(
-      ApiError,
-    );
+    await expect(updateUser(MARCUS.id, { departmentId: 'dept-x' })).rejects.toBeInstanceOf(ApiError);
   });
 });

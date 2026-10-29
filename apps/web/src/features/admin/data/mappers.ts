@@ -4,6 +4,7 @@
  * ErrorState rather than rendering half a table (these repos never fall
  * back to fixtures — see `types.ts`).
  */
+import { mapDepartmentRef } from '@/features/departments/data/mappers';
 import type {
   ActivityItem,
   AssignmentEntry,
@@ -119,7 +120,7 @@ export function mapStudentRow(raw: unknown): DirectoryStudent {
     id: str(r.id),
     name: name(r) || 'Unknown',
     email: str(r.email),
-    program: nullableStr(r.program),
+    department: mapDepartmentRef(r.department),
     isActive: bool(r.isActive),
     createdAt: when(r.createdAt),
   };
@@ -174,7 +175,7 @@ export function mapWorkflowSummary(raw: unknown): WorkflowSummary {
   return {
     id: str(r.id),
     name: str(r.name),
-    program: nullableStr(r.program),
+    department: mapDepartmentRef(r.department),
     academicSession: nullableStr(r.academicSession),
     description: nullableStr(r.description),
     isDefault: bool(r.isDefault),
