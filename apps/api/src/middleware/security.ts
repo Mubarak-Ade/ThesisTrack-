@@ -26,7 +26,18 @@ const allowedOrigins = env.WEB_ORIGIN.split(',')
 security.use(helmet());
 security.use(
   cors({
-    origin: (origin, callback) => callback(null, !origin || allowedOrigins.includes(origin)),
+    origin: (origin, callback) => {
+      const allowed = !origin || allowedOrigins.includes(origin);
+      // A rejected origin is otherwise invisible in production: the browser
+      // only says "CORS error" and the server log looks clean. One warn line
+      // names the exact origin to fix in WEB_ORIGIN.
+      if (!allowed) {
+        console.warn(
+          `CORS: origin rejected — ${origin} (WEB_ORIGIN allows: ${allowedOrigins.join(', ')})`,
+        );
+      }
+      callback(null, allowed);
+    },
     credentials: true,
   }),
 );
