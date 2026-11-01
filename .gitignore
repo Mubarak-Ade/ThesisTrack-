@@ -1,19 +1,42 @@
+# Dependencies and build output
 node_modules/
 dist/
-.env
-.env.local
-.env.*.local
-.env.test
-*.log
-.DS_Store
 .turbo/
 coverage/
+
+# Environment files — templates stay tracked
+.env
+.env.*
+!.env.example
+.env.test
+
+# Logs
+*.log
+
+# OS / editor / agent-local state
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.claude/
 
 # Internal engineering documents (specs, plans) — kept on disk, never pushed
 docs/
 
+# UI review screenshots — local evidence, never part of the product
+.shots-review/
+
+# Lockfiles: pnpm-lock.yaml is authoritative
+package-lock.json
+npm-shrinkwrap.json
+yarn.lock
+
 # Runtime file storage (ADR-09) — local disk, never committed
 apps/api/uploads/
 
-# Build cache — never stage (tsc incremental state churns on every build)
-apps/web/tsconfig.tsbuildinfo
+# Database dumps and backups — contain real account data
+*.dump
+*.sql.gz
+
+# TypeScript incremental build state — churns on every build
+*.tsbuildinfo
