@@ -33,7 +33,6 @@ vi.mock('@/features/departments/hooks/useDepartments', () => ({
 
 const MARCUS: ConsoleUser = {
   id: '00000000-0000-4000-8000-000000000002',
-  code: 'USR-9012',
   firstName: 'Marcus',
   lastName: 'Holloway',
   email: 'm.holloway@student.edu',
@@ -49,7 +48,6 @@ const MARCUS: ConsoleUser = {
 const ANITA: ConsoleUser = {
   ...MARCUS,
   id: '00000000-0000-4000-8000-000000000004',
-  code: 'USR-1102',
   firstName: 'Anita',
   lastName: 'Desai',
   email: 'a.desai@student.edu',
@@ -129,7 +127,6 @@ describe('UserList (plan 4)', () => {
     const LIVE = {
       ...MARCUS,
       id: '1e98a7c3-2f11-4b6d-9c0a-55aa77bb88cc',
-      code: 'USR-1E98',
       department: null,
       lastLoginLabel: undefined,
     } satisfies ConsoleUser;

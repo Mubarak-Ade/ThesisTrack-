@@ -3,6 +3,6 @@
  * but kept dependency-free so middleware and validators can import it
  * without pulling in Drizzle.
  */
-export const ROLES = ['student', 'supervisor', 'administrator'] as const;
+export const ROLES = ['student', 'supervisor', 'coordinator', 'administrator'] as const;
 
 export type Role = (typeof ROLES)[number];

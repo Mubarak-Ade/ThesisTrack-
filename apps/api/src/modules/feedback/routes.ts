@@ -1,8 +1,10 @@
 import { Router } from 'express';
 
 import {
+  requireDepartmentScope,
   requireFeedbackAccess,
   requireProjectAccess,
+  requireRole,
   requireSubmissionAccess,
 } from '../../authz/index.js';
 import { validate } from '../../middleware/validate.js';
@@ -16,6 +18,8 @@ import {
 } from './schema.js';
 
 const router = Router();
+
+router.use(requireDepartmentScope());
 
 /*
  * §9.4 guard order, exactly:
@@ -45,6 +49,8 @@ router.get(
 
 router.post(
   '/projects/:projectId/feedback',
+  // Coordinator access is read-only oversight (ADR-17) — never authorship.
+  requireRole('student', 'supervisor', 'administrator'),
   validate(projectFeedbackParamsSchema, 'params'),
   validate(createFeedbackSchema),
   requireProjectAccess(),
@@ -62,6 +68,7 @@ router.get(
 
 router.post(
   '/submissions/:submissionId/feedback',
+  requireRole('student', 'supervisor', 'administrator'),
   validate(submissionFeedbackParamsSchema, 'params'),
   validate(createFeedbackSchema),
   requireSubmissionAccess(),

@@ -18,7 +18,7 @@ export const show = asyncHandler(async (req, res) => {
 export const assign = asyncHandler(async (req, res) => {
   const { projectId } = req.params as AssignmentParams;
   const { supervisorId } = req.body as AssignSupervisorInput;
-  const assignment = await service.assign(projectId, supervisorId, req.user!.id);
+  const assignment = await service.assign(projectId, supervisorId, req.user!);
   respond(res, 201, { assignment });
 });
 
@@ -26,14 +26,14 @@ export const assign = asyncHandler(async (req, res) => {
 export const change = asyncHandler(async (req, res) => {
   const { projectId } = req.params as AssignmentParams;
   const { supervisorId } = req.body as AssignSupervisorInput;
-  const assignment = await service.changeSupervisor(projectId, supervisorId, req.user!.id);
+  const assignment = await service.changeSupervisor(projectId, supervisorId, req.user!);
   respond(res, 200, { assignment });
 });
 
 // DELETE /projects/:projectId/supervisor — end now; the row stays as history.
 export const end = asyncHandler(async (req, res) => {
   const { projectId } = req.params as AssignmentParams;
-  const assignment = await service.end(projectId);
+  const assignment = await service.end(projectId, req.user!);
   respond(res, 200, { assignment });
 });
 
@@ -56,7 +56,7 @@ export const assignForStudent = asyncHandler(async (req, res) => {
   const assignment = await service.assignToStudentFromStudentParam(
     studentId,
     supervisorId,
-    req.user!.id,
+    req.user!,
   );
   respond(res, 201, { assignment });
 });
@@ -68,7 +68,7 @@ export const changeForStudent = asyncHandler(async (req, res) => {
   const assignment = await service.changeSupervisorFromStudentParam(
     studentId,
     supervisorId,
-    req.user!.id,
+    req.user!,
   );
   respond(res, 200, { assignment });
 });
@@ -76,7 +76,7 @@ export const changeForStudent = asyncHandler(async (req, res) => {
 // DELETE /students/:studentId/supervisor — admin; soft end, row stays history.
 export const endForStudent = asyncHandler(async (req, res) => {
   const { studentId } = req.params as StudentAssignmentParams;
-  respond(res, 200, { assignment: await service.endFromStudentParam(studentId) });
+  respond(res, 200, { assignment: await service.endFromStudentParam(studentId, req.user!) });
 });
 
 // GET /supervisors/me/students — the caseload, one row per student (§6.2 I13).

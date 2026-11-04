@@ -13,6 +13,7 @@ import {
   countProjectsByStatus,
   createWorkflow,
   deleteWorkflow,
+  duplicateWorkflow,
   endSupervisor,
   getMonitoring,
   getReportCounts,
@@ -28,6 +29,8 @@ import {
 import type {
   CreateWorkflowInput,
   DirectoryPageArgs,
+  DuplicateWorkflowInput,
+  DuplicateWorkflowResult,
   PatchWorkflowInput,
   ProjectStatus,
   ProjectsPageArgs,
@@ -68,16 +71,23 @@ export function useSetProjectStatus() {
 
 export function useStudents(args: DirectoryPageArgs) {
   return useQuery({
-    queryKey: ['admin', 'students', args.page, args.limit, args.q ?? ''],
+    queryKey: [
+      'admin',
+      'students',
+      args.page,
+      args.limit,
+      args.q ?? '',
+      args.departmentId ?? 'all',
+    ],
     queryFn: () => listStudents(args),
     staleTime: 10_000,
   });
 }
 
-export function useSupervisors(args: Pick<DirectoryPageArgs, 'limit'>) {
+export function useSupervisors(args: Pick<DirectoryPageArgs, 'limit' | 'departmentId'>) {
   return useQuery({
-    queryKey: ['admin', 'supervisors', args.limit],
-    queryFn: () => listSupervisors({ page: 1, limit: args.limit }),
+    queryKey: ['admin', 'supervisors', args.limit, args.departmentId ?? 'all'],
+    queryFn: () => listSupervisors({ page: 1, limit: args.limit, departmentId: args.departmentId }),
     staleTime: 60_000,
   });
 }
@@ -152,14 +162,17 @@ export function useWorkflow(workflowId: string | undefined) {
 export function useWorkflowWrite() {
   const client = useQueryClient();
   const done = () => void client.invalidateQueries({ queryKey: ['admin'] });
-  return useMutation<WorkflowDetail | void, Error, {
-    action: 'create' | 'patch' | 'delete';
+  return useMutation<WorkflowDetail | DuplicateWorkflowResult | void, Error, {
+    action: 'create' | 'patch' | 'delete' | 'duplicate';
     workflowId?: string;
-    input?: PatchWorkflowInput | CreateWorkflowInput;
+    input?: PatchWorkflowInput | CreateWorkflowInput | DuplicateWorkflowInput;
   }>({
     mutationFn: async ({ action, workflowId, input }) => {
       if (action === 'create') return createWorkflow(input as CreateWorkflowInput);
       if (action === 'patch') return patchWorkflow(workflowId!, input as PatchWorkflowInput);
+      if (action === 'duplicate') {
+        return duplicateWorkflow(workflowId!, input as DuplicateWorkflowInput);
+      }
       return deleteWorkflow(workflowId!);
     },
     onSuccess: done,

@@ -33,10 +33,9 @@ function str(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
 }
 
-/** Display code (spec §4): `STU-` + first 4 cleaned id chars, like USR codes. */
-function asCode(id: string): string {
-  const cleaned = id.replace(/-/g, '');
-  return cleaned.length >= 4 ? `STU-${cleaned.slice(0, 4).toUpperCase()}` : id;
+/** Display field — null when the account has no registration number. */
+function asNullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
 }
 
 /** Managed department (2026-10-28) — absent → 'Unaffiliated'. */
@@ -56,6 +55,7 @@ function asYear(value: unknown): number | null {
 interface LiveStudent {
   id: string;
   name: string;
+  registrationNumber: string | null;
   email: string;
   program: string;
   status: 'Active' | 'Inactive';
@@ -70,6 +70,7 @@ function mapStudent(value: unknown): LiveStudent {
   return {
     id,
     name: `${str(r.firstName)} ${str(r.lastName)}`.trim(),
+    registrationNumber: asNullableString(r.registrationNumber),
     email: str(r.email),
     program: asDepartment(r.department),
     status: r.isActive === true ? 'Active' : 'Inactive',
@@ -178,7 +179,7 @@ function fallbackSnapshot(args: { page: number; limit: number; q?: string }): St
   const q = args.q?.trim().toLowerCase();
   const filtered = STUDENTS_FIXTURES.rows.filter((row) => {
     if (!q) return true;
-    return `${row.name} ${row.code} ${row.email} ${row.program}`.toLowerCase().includes(q);
+    return `${row.name} ${row.registrationNumber ?? ''} ${row.email} ${row.program}`.toLowerCase().includes(q);
   });
   const start = (args.page - 1) * args.limit;
   return {
@@ -208,7 +209,7 @@ export async function getStudents(args: ListStudentsArgs = {}): Promise<StudentS
     const rows: StudentRow[] = await Promise.all(
       students.map(async (student) => ({
         name: student.name,
-        code: asCode(student.id),
+        registrationNumber: student.registrationNumber,
         email: student.email,
         program: student.program,
         status: student.status,

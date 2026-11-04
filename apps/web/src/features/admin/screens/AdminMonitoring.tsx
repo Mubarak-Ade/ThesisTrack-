@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import ErrorState from '@/components/feedback/ErrorState';
 import LoadingState from '@/components/feedback/LoadingState';
 import { formatRelative } from '@/lib/utils/time';
+import { useAuthStore } from '@/stores/auth';
 import { useMonitoring } from '../hooks';
 import type { MonitoringProjectRow } from '../data';
 
@@ -50,6 +51,9 @@ function StageCell({ row }: { row: MonitoringProjectRow }) {
 
 export default function AdminMonitoring() {
   const query = useMonitoring();
+  const user = useAuthStore((s) => s.user);
+  const isCoordinator = user?.role === 'coordinator';
+  const scope = isCoordinator ? (user?.department?.name ?? 'Your department') : 'All departments';
 
   if (query.isPending) return <LoadingState label="Loading monitoring…" />;
   if (query.isError || !query.data) {
@@ -71,7 +75,7 @@ export default function AdminMonitoring() {
         aria-label="Breadcrumb"
         className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
       >
-        <span>Admin</span>
+        <span>{isCoordinator ? 'Coordinator' : 'Super Admin'}</span>
         <span aria-hidden="true">›</span>
         <span className="text-foreground">Monitoring</span>
       </nav>
@@ -86,6 +90,7 @@ export default function AdminMonitoring() {
             changed recently. Observing only — the Coordinator never approves or advances
             academic work.
           </p>
+          <p className="mt-1 text-xs font-medium text-muted-foreground">Scope: {scope}</p>
         </div>
         <Button type="button" variant="outline" onClick={() => void query.refetch()} disabled={query.isFetching}>
           {query.isFetching ? 'Refreshing…' : 'Refresh'}

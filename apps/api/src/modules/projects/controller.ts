@@ -22,7 +22,7 @@ export const list = asyncHandler(async (req, res) => {
 // POST /projects — admin manual creation; ADR-16 resolution runs either way.
 export const create = asyncHandler(async (req, res) => {
   const input = req.body as CreateProjectInput;
-  const project = await service.createProject(req.user!.id, input);
+  const project = await service.createProject(req.user!, input);
   respond(res, 201, { project });
 });
 

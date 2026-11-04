@@ -99,5 +99,22 @@ export function navForRole(role: Role, state: NavState): NavItem[] {
         NOTIFICATIONS,
         SETTINGS,
       ];
+    case 'coordinator':
+      // The administrator's academic-oversight column without Departments
+      // (design 2026-11-02, ADR-17): department management stays super-admin
+      // only, while every scoped workflow/assignment/report screen is shared.
+      return [
+        DASHBOARD,
+        { label: 'Faculty', icon: GraduationCap, to: '/faculty' },
+        { label: 'Students', icon: UserRound, to: '/students' },
+        { label: 'Projects', icon: FolderGit2, to: '/projects' },
+        PROPOSALS,
+        { label: 'Assignments', icon: UserCheck, to: '/assignments' },
+        { label: 'Workflows', icon: GitBranch, to: '/workflows' },
+        { label: 'Monitoring', icon: Activity, to: '/monitoring' },
+        { label: 'Reports', icon: FileBarChart2, to: '/reports' },
+        NOTIFICATIONS,
+        SETTINGS,
+      ];
   }
 }

@@ -27,7 +27,7 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
   rows: [
     {
       name: 'Dr. Elena Rossi',
-      code: 'FAC-8821',
+      registrationNumber: 'STAFF-8821',
       email: 'e.rossi@university.edu',
       program: 'Informatics',
       workloadStudents: 8,
@@ -38,7 +38,7 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     },
     {
       name: 'Prof. Thomas Miller',
-      code: 'FAC-4412',
+      registrationNumber: 'STAFF-4412',
       email: 't.miller@university.edu',
       program: 'Architecture',
       workloadStudents: 5,
@@ -49,7 +49,7 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     },
     {
       name: 'Dr. Sarah Blake',
-      code: 'FAC-9811',
+      registrationNumber: 'STAFF-9811',
       email: 's.blake@university.edu',
       program: 'Cyber Security',
       workloadStudents: 3,
@@ -60,7 +60,7 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     },
     {
       name: 'Dr. Alistair Vance',
-      code: 'FAC-1102',
+      registrationNumber: 'STAFF-1102',
       email: 'a.vance@university.edu',
       program: 'Informatics',
       workloadStudents: 12,
@@ -71,7 +71,7 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     },
     {
       name: 'Prof. Julianne Moore',
-      code: 'FAC-2234',
+      registrationNumber: 'STAFF-2234',
       email: 'j.moore@university.edu',
       program: 'Philosophy',
       workloadStudents: 0,
@@ -82,7 +82,7 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     },
     {
       name: 'Prof. Daniel Okafor',
-      code: 'FAC-5567',
+      registrationNumber: 'STAFF-5567',
       email: 'd.okafor@university.edu',
       program: 'Architecture',
       workloadStudents: 4,
@@ -93,7 +93,7 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     },
     {
       name: 'Dr. Priya Nair',
-      code: 'FAC-3345',
+      registrationNumber: 'STAFF-3345',
       email: 'p.nair@university.edu',
       program: 'Cyber Security',
       workloadStudents: 6,
@@ -104,7 +104,7 @@ export const FACULTY_FIXTURES: FacultySnapshot = {
     },
     {
       name: 'Prof. Henrik Sorensen',
-      code: 'FAC-7789',
+      registrationNumber: 'STAFF-7789',
       email: 'h.sorensen@university.edu',
       program: 'Philosophy',
       workloadStudents: 7,

@@ -1,6 +1,11 @@
 import { Router } from 'express';
 
-import { requireProjectAccess, requireRole, requireSubmissionAccess } from '../../authz/index.js';
+import {
+  requireDepartmentScope,
+  requireProjectAccess,
+  requireRole,
+  requireSubmissionAccess,
+} from '../../authz/index.js';
 import { validate } from '../../middleware/validate.js';
 import * as controller from './controller.js';
 import {
@@ -10,6 +15,8 @@ import {
 } from './schema.js';
 
 const router = Router();
+
+router.use(requireDepartmentScope());
 
 /*
  * §9.4 guard order, exactly:

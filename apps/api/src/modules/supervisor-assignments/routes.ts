@@ -1,6 +1,11 @@
 import { Router } from 'express';
 
-import { requireAdmin, requireProjectAccess, requireRole, requireStudentAccess } from '../../authz/index.js';
+import {
+  requireDepartmentScope,
+  requireProjectAccess,
+  requireRole,
+  requireStudentAccess,
+} from '../../authz/index.js';
 import { validate } from '../../middleware/validate.js';
 import * as controller from './controller.js';
 import {
@@ -11,9 +16,11 @@ import {
 
 const router = Router();
 
+router.use(requireDepartmentScope());
+
 /**
  * GET — who supervises this project? Visible to the project's participants
- * (owner student, assigned supervisor) and admins; writes are admin-only.
+ * (owner student, assigned supervisor) and admins; writes are admin/coordinator.
  */
 router.get(
   '/projects/:projectId/supervisor',
@@ -24,7 +31,7 @@ router.get(
 
 router.post(
   '/projects/:projectId/supervisor',
-  requireAdmin(),
+  requireRole('administrator', 'coordinator'),
   validate(assignmentParamsSchema, 'params'),
   validate(assignSupervisorSchema),
   controller.assign,
@@ -32,7 +39,7 @@ router.post(
 
 router.patch(
   '/projects/:projectId/supervisor',
-  requireAdmin(),
+  requireRole('administrator', 'coordinator'),
   validate(assignmentParamsSchema, 'params'),
   validate(assignSupervisorSchema),
   controller.change,
@@ -40,7 +47,7 @@ router.patch(
 
 router.delete(
   '/projects/:projectId/supervisor',
-  requireAdmin(),
+  requireRole('administrator', 'coordinator'),
   validate(assignmentParamsSchema, 'params'),
   controller.end,
 );
@@ -48,7 +55,7 @@ router.delete(
 /*
  * Student-scoped assignment routes (§11). The read is deliberately wider than
  * the project read: the student themself, their ACTIVE supervisor, or an admin.
- * The three writes stay admin-only.
+ * The three writes are admin/coordinator-scoped.
  */
 
 router.get(
@@ -60,7 +67,7 @@ router.get(
 
 router.post(
   '/students/:studentId/supervisor',
-  requireAdmin(),
+  requireRole('administrator', 'coordinator'),
   validate(studentAssignmentParamsSchema, 'params'),
   validate(assignSupervisorSchema),
   controller.assignForStudent,
@@ -68,7 +75,7 @@ router.post(
 
 router.patch(
   '/students/:studentId/supervisor',
-  requireAdmin(),
+  requireRole('administrator', 'coordinator'),
   validate(studentAssignmentParamsSchema, 'params'),
   validate(assignSupervisorSchema),
   controller.changeForStudent,
@@ -76,7 +83,7 @@ router.patch(
 
 router.delete(
   '/students/:studentId/supervisor',
-  requireAdmin(),
+  requireRole('administrator', 'coordinator'),
   validate(studentAssignmentParamsSchema, 'params'),
   controller.endForStudent,
 );

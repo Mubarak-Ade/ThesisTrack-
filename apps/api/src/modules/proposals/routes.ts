@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from 'express';
 
 import {
   requireAttachmentAccess,
+  requireDepartmentScope,
   requireProposalAccess,
   requireRole,
   requireWorkflow,
@@ -22,6 +23,9 @@ import { PROPOSAL_ACTION_ROLES, PROPOSAL_TRANSITIONS, type ProposalAction } from
 import type { ProposalStatus } from './types.js';
 
 const router = Router();
+
+// Coordinator scope resolves once per request before any proposal guard.
+router.use(requireDepartmentScope());
 
 /**
  * Layer 3 on every mutating route (spec §13.1 — the first module to wire
@@ -137,19 +141,19 @@ router.post(
 
 router.post(
   '/proposals/:proposalId/start-review',
-  requireRole('supervisor', 'administrator'),
+  requireRole('supervisor', 'administrator', 'coordinator'),
   validate(proposalParamsSchema, 'params'),
-  requireProposalAccess({ allow: ['supervisor', 'admin'] }),
+  requireProposalAccess({ allow: ['supervisor', 'admin', 'coordinator'] }),
   proposalWorkflow('start-review'),
   controller.startReview,
 );
 
 router.post(
   '/proposals/:proposalId/review',
-  requireRole('supervisor', 'administrator'),
+  requireRole('supervisor', 'administrator', 'coordinator'),
   validate(proposalParamsSchema, 'params'),
   validate(reviewProposalSchema),
-  requireProposalAccess({ allow: ['supervisor', 'admin'] }),
+  requireProposalAccess({ allow: ['supervisor', 'admin', 'coordinator'] }),
   proposalWorkflow('review'),
   controller.review,
 );

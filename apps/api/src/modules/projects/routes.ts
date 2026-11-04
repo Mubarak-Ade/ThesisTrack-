@@ -1,6 +1,10 @@
 import { Router } from 'express';
 
-import { requireProjectAccess, requireRole } from '../../authz/index.js';
+import {
+  requireDepartmentScope,
+  requireProjectAccess,
+  requireRole,
+} from '../../authz/index.js';
 import { validate } from '../../middleware/validate.js';
 import * as controller from './controller.js';
 import {
@@ -11,6 +15,9 @@ import {
 } from './schema.js';
 
 const router = Router();
+
+// Resolve a coordinator's current department before every project route.
+router.use(requireDepartmentScope());
 
 /**
  * §9.4 guard order:
@@ -31,7 +38,7 @@ router.get('/projects', validate(listProjectsQuerySchema, 'query'), controller.l
 
 router.post(
   '/projects',
-  requireRole('administrator'),
+  requireRole('administrator', 'coordinator'),
   validate(createProjectSchema),
   controller.create,
 );
@@ -45,7 +52,7 @@ router.get(
 
 router.patch(
   '/projects/:projectId',
-  requireRole('administrator'),
+  requireRole('administrator', 'coordinator'),
   validate(projectIdParamsSchema, 'params'),
   validate(patchProjectSchema),
   requireProjectAccess(),

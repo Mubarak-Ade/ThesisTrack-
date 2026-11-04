@@ -4,15 +4,13 @@
  */
 import type { DepartmentRef } from '@/features/departments/data/types';
 
-export type Role = 'student' | 'supervisor' | 'administrator';
-/** `coordinator` exists only in display fixtures — the API cannot produce it. */
-export type DisplayRole = Role | 'coordinator';
+export type Role = 'student' | 'supervisor' | 'administrator' | 'coordinator';
+/** Alias kept for backwards compatibility — now identical to `Role`. */
+export type DisplayRole = Role;
 export type UserStatus = 'ACTIVE' | 'INVITED' | 'INACTIVE';
 
 export interface ConsoleUser {
   id: string;
-  /** Display code — fixtures pass theirs through; live rows derive `USR-XXXX` from the id (spec §4). */
-  code?: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -20,6 +18,7 @@ export interface ConsoleUser {
   status: UserStatus;
   isActive: boolean;
   createdAt: string | null;
+  /** The account's registration/staff number; `null` when the account has none. */
   registrationNumber: string | null;
   /**
    * Managed department (design 2026-10-28 — PROPOSED ADR-11 reversal). The

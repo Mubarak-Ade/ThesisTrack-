@@ -5,6 +5,7 @@ import {
   text,
   boolean,
   timestamp,
+  check,
   index,
   uniqueIndex,
   type AnyPgColumn,
@@ -38,6 +39,15 @@ export const users = pgTable(
   },
   (table) => [
     index('idx_users_role').on(table.role),
+    // Coordinator invariant (design 2026-11-02, ADR-17): a department-scoped
+    // coordinator is impossible without a department. The service gives the
+    // friendly error; this constraint is the last line.
+    check(
+      'users_coordinator_department',
+      sql`role <> 'coordinator' OR department_id IS NOT NULL`,
+    ),
+    // Scoped-list support: every coordinator query filters on both columns.
+    index('idx_users_department_role').on(table.departmentId, table.role),
     // One account per registration number, system-wide, case-insensitive
     // (design 2026-10-28). Partial: legacy rows without a number never collide.
     uniqueIndex('users_registration_number_unique')

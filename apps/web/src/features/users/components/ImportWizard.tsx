@@ -20,6 +20,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { downloadCsv } from '@/lib/csv';
 import { useDepartments } from '@/features/departments/hooks/useDepartments';
 import { ApiError } from '@/lib/api/http';
+import { useAuthStore } from '@/stores/auth';
 import { cn } from '@/lib/utils';
 import { ROLES } from '../data/constants';
 import type { ImportRow } from '../data/types';
@@ -100,11 +101,16 @@ interface ValidatedRow {
  * `departmentCodes` maps a lower-cased managed department NAME to its code
  * (`''` for a legacy row without one). Unknown names are refused here so the
  * wizard points at the row instead of failing the whole POST later.
+ *
+ * A coordinator's CSV is pinned to its own department: the column may repeat
+ * that name (or omit it), but a foreign value is a row error, and the posted
+ * payload always carries the locked department.
  */
 function validateRows(
   rows: string[][],
   mapping: Mapping,
   departmentCodes: Map<string, string>,
+  lockedDepartment: { name: string; code: string | null } | null = null,
 ): ValidatedRow[] {
   return rows.map((cells, offset) => {
     const errors: string[] = [];
@@ -119,7 +125,10 @@ function validateRows(
     const roleRaw = pick('role').toLowerCase();
     const registrationNumber = pick('registrationNumber').toUpperCase();
     const department = pick('department');
-    const deptCode = department ? departmentCodes.get(department.toLowerCase()) : undefined;
+    const effectiveDepartment = lockedDepartment ? lockedDepartment.name : department;
+    const deptCode = effectiveDepartment
+      ? departmentCodes.get(effectiveDepartment.toLowerCase())
+      : undefined;
 
     if (!firstName) errors.push('First name is required');
     if (!lastName) errors.push('Last name is required');
@@ -128,6 +137,15 @@ function validateRows(
     if (!roleRaw) errors.push('Role is required');
     else if (!(ROLES as readonly string[]).includes(roleRaw)) {
       errors.push(`Unknown role "${pick('role')}" — expected Student, Supervisor or Administrator`);
+    } else if (lockedDepartment && roleRaw !== 'student' && roleRaw !== 'supervisor') {
+      errors.push('Coordinators can only import students and supervisors');
+    }
+    if (
+      lockedDepartment &&
+      department &&
+      department.toLowerCase() !== lockedDepartment.name.toLowerCase()
+    ) {
+      errors.push(`Department must be ${lockedDepartment.name} for your scope`);
     }
     if (roleRaw === 'student') {
       if (!registrationNumber) {
@@ -135,14 +153,14 @@ function validateRows(
       } else if (!REGISTRATION_PATTERN.test(registrationNumber)) {
         errors.push('Use FAC/YY/DEPT/NNNNN, e.g. CST/22/SWE/00825');
       } else if (deptCode && registrationNumber.split('/')[2] !== deptCode) {
-        errors.push(`DEPT must be ${deptCode} for ${department}`);
+        errors.push(`DEPT must be ${deptCode} for ${effectiveDepartment}`);
       }
     }
     if (registrationNumber.length > 32) {
       errors.push('Registration number must be 32 characters or fewer');
     }
-    if (department && deptCode === undefined) {
-      errors.push(`Unknown department "${department}" — pick one from the managed list`);
+    if (effectiveDepartment && deptCode === undefined) {
+      errors.push(`Unknown department "${effectiveDepartment}" — pick one from the managed list`);
     }
 
     const values: ImportRow = {
@@ -152,7 +170,7 @@ function validateRows(
       role: roleRaw as ImportRow['role'],
     };
     if (registrationNumber) values.registrationNumber = registrationNumber;
-    if (department) values.department = department;
+    if (effectiveDepartment) values.department = effectiveDepartment;
 
     return {
       index: offset + 1,
@@ -226,20 +244,31 @@ export default function ImportWizard() {
   const [apiError, setApiError] = useState<{ message: string; details?: unknown } | null>(null);
   const [createdCount, setCreatedCount] = useState<number | null>(null);
   const { data: departmentPage } = useDepartments();
-  const departmentCodes = useMemo(
+  const session = useAuthStore((s) => s.user);
+  const isCoordinator = session?.role === 'coordinator';
+  const lockedDepartment = useMemo(
     () =>
-      new Map(
-        (departmentPage?.items ?? []).map((department) => [
-          department.name.toLowerCase(),
-          department.code ?? '',
-        ]),
-      ),
-    [departmentPage],
+      isCoordinator && session?.department
+        ? { name: session.department.name, code: session.department.code }
+        : null,
+    [isCoordinator, session?.department],
   );
+  const departmentCodes = useMemo(() => {
+    const codes = new Map(
+      (departmentPage?.items ?? []).map((department) => [
+        department.name.toLowerCase(),
+        department.code ?? '',
+      ]),
+    );
+    if (lockedDepartment) {
+      codes.set(lockedDepartment.name.toLowerCase(), lockedDepartment.code ?? '');
+    }
+    return codes;
+  }, [departmentPage, lockedDepartment]);
 
   const validated = useMemo(
-    () => (step >= 3 ? validateRows(rows, mapping, departmentCodes) : []),
-    [step, rows, mapping, departmentCodes],
+    () => (step >= 3 ? validateRows(rows, mapping, departmentCodes, lockedDepartment) : []),
+    [step, rows, mapping, departmentCodes, lockedDepartment],
   );
   const validCount = validated.filter((row) => row.values).length;
   const errorCount = validated.length - validCount;
@@ -396,6 +425,9 @@ export default function ImportWizard() {
               <p className="text-xs text-muted-foreground">
                 Required columns: first name, last name, email, role. Registration number is required
                 for student rows; the department must match the managed list (optional).
+                {lockedDepartment
+                  ? ` Your import is scoped to ${lockedDepartment.name}; other departments are row errors.`
+                  : ''}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" onClick={downloadTemplate}>
@@ -438,6 +470,7 @@ export default function ImportWizard() {
                   <select
                     id={`map-${field}`}
                     value={mapping[field] === null ? '' : String(mapping[field])}
+                    disabled={field === 'department' && !!lockedDepartment}
                     onChange={(event) =>
                       setMapping((current) => ({
                         ...current,

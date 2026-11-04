@@ -134,10 +134,10 @@ export default function StudentList() {
   const exportCsv = () => {
     downloadCsv(
       'thesistrack-students.csv',
-      ['Name', 'Student ID', 'Email', 'Program', 'Status', 'Thesis Status', 'Enrolled', 'Supervisor'],
+      ['Name', 'Registration No.', 'Email', 'Program', 'Status', 'Thesis Status', 'Enrolled', 'Supervisor'],
       pageRows.map((row) => [
         row.name,
-        row.code,
+        row.registrationNumber ?? '',
         row.email,
         row.program,
         row.status,
@@ -273,7 +273,7 @@ export default function StudentList() {
                 <tbody>
                   {pageRows.map((row) => (
                     <StudentRowView
-                      key={row.code}
+                      key={row.registrationNumber ?? row.email}
                       row={row}
                       onAction={() => toast.info('Row actions are not available yet')}
                     />
@@ -359,7 +359,9 @@ function StudentRowView({ row, onAction }: { row: StudentRow; onAction: () => vo
           <Avatar size="sm" />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-foreground">{row.name}</p>
-            <p className="truncate font-mono text-xs text-primary">{row.code}</p>
+            <p className="truncate font-mono text-xs text-primary">
+              {row.registrationNumber ?? '—'}
+            </p>
             <p className="truncate text-xs text-muted-foreground">{row.email}</p>
           </div>
         </div>

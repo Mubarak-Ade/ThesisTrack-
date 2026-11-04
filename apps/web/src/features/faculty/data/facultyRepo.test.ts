@@ -23,6 +23,7 @@ const SUPERVISOR_1 = {
   firstName: 'Elena',
   lastName: 'Rossi',
   email: 'e.rossi@university.edu',
+  registrationNumber: 'STAFF-8821',
   role: 'supervisor',
   program: 'Informatics',
   isActive: true,
@@ -34,6 +35,7 @@ const SUPERVISOR_2 = {
   firstName: 'Thomas',
   lastName: 'Miller',
   email: 't.miller@university.edu',
+  registrationNumber: null,
   role: 'supervisor',
   program: null,
   isActive: false,
@@ -85,7 +87,7 @@ describe('getFaculty (live)', () => {
     expect(snap.rows).toHaveLength(3);
     expect(snap.rows[0]).toEqual({
       name: 'Elena Rossi',
-      code: 'FAC-F00D', // derived: FAC- + first 4 cleaned id chars (spec §4)
+      registrationNumber: 'STAFF-8821',
       email: 'e.rossi@university.edu',
       program: 'Informatics',
       workloadStudents: null, // §4.5 — no workload endpoint
@@ -96,7 +98,7 @@ describe('getFaculty (live)', () => {
     });
     expect(snap.rows[1]).toMatchObject({
       name: 'Thomas Miller',
-      code: 'FAC-CAFE',
+      registrationNumber: null,
       program: 'Unaffiliated',
       status: 'INACTIVE',
     });

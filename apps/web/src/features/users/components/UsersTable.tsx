@@ -248,9 +248,9 @@ export default function UsersTable({ rows, sort, onSort, loading }: UsersTablePr
                             >
                               {user.firstName} {user.lastName}
                             </Link>
-                            {user.code && (
-                              <span className="block truncate text-xs font-semibold text-primary">
-                                {user.code}
+                            {user.registrationNumber && (
+                              <span className="block truncate font-mono text-xs font-semibold text-primary">
+                                {user.registrationNumber}
                               </span>
                             )}
                             <span className="block truncate text-xs text-muted-foreground">

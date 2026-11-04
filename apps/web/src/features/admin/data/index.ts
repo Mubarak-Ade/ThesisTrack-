@@ -22,6 +22,7 @@ export {
   createWorkflow,
   patchWorkflow,
   deleteWorkflow,
+  duplicateWorkflow,
 } from './workflowsRepo';
 export { getMonitoring } from './monitoringRepo';
 export { getReportCounts, buildReport } from './reportsRepo';

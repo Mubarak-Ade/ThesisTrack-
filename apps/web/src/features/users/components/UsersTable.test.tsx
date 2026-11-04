@@ -20,7 +20,6 @@ import { toast } from 'sonner';
 
 const INVITED: ConsoleUser = {
   id: 'inv-1',
-  code: 'USR-4242',
   firstName: 'Sadie',
   lastName: 'Kasir',
   email: 'sadie.kasir@student.edu',
@@ -28,7 +27,7 @@ const INVITED: ConsoleUser = {
   status: 'INVITED',
   isActive: false,
   createdAt: null,
-  registrationNumber: null,
+  registrationNumber: 'CST/22/INF/00457',
   department: { id: 'dept-inf', name: 'Informatics', code: 'INF' },
 };
 
@@ -59,6 +58,13 @@ beforeEach(() => {
 });
 
 describe('UsersTable row menu — resend invitation', () => {
+  it('shows the registration number under the name (not a derived dummy code)', () => {
+    renderTable([INVITED]);
+
+    expect(screen.getByText('CST/22/INF/00457')).toBeInTheDocument();
+    expect(screen.queryByText(/^USR-/)).toBeNull();
+  });
+
   it('offers "Resend invitation" on INVITED rows', () => {
     renderTable([INVITED]);
 

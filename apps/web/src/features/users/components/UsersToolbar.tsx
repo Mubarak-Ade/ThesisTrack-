@@ -11,7 +11,8 @@ const ROLE_OPTIONS: { value: Role | ''; label: string }[] = [
   { value: '', label: 'All roles' },
   { value: 'student', label: 'Student' },
   { value: 'supervisor', label: 'Supervisor' },
-  { value: 'administrator', label: 'Administrator' },
+  { value: 'coordinator', label: 'Coordinator' },
+  { value: 'administrator', label: 'Super Admin' },
 ];
 
 const STATUS_OPTIONS: { value: '' | 'true' | 'false'; label: string }[] = [

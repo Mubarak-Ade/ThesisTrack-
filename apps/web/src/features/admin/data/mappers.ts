@@ -211,6 +211,16 @@ export function mapWorkflowDetail(value: unknown): import('./types').WorkflowDet
   };
 }
 
+/** POST /workflows/:id/duplicate → detail + `archivedWorkflowId` (or null). */
+export function mapDuplicateWorkflow(value: unknown): import('./types').DuplicateWorkflowResult {
+  const r = asRecord(value);
+  const detail = mapWorkflowDetail(value);
+  return {
+    ...detail,
+    archivedWorkflowId: nullableStr(r.archivedWorkflowId),
+  };
+}
+
 /* -------------------------------------------------- activity feed (§11.13) */
 
 export function mapActivityItem(raw: unknown): ActivityItem {

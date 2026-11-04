@@ -1,6 +1,7 @@
 import { Router, type RequestHandler } from 'express';
 
 import {
+  requireDepartmentScope,
   requireProjectAccess,
   requireRole,
   requireSubmissionAccess,
@@ -28,6 +29,8 @@ import {
 import type { SubmissionStatus } from './types.js';
 
 const router = Router();
+
+router.use(requireDepartmentScope());
 
 /**
  * Layer 3 on every mutating route (spec §13.1). The resource guard cached

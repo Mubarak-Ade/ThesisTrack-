@@ -8,6 +8,8 @@ export interface ProjectListFilters {
   studentId?: string;
   /** Supervisor scope: projects of their ACTIVE assignments (§13.3). */
   projectIds?: string[];
+  /** Coordinator scope: only students in this department (ADR-17). */
+  departmentId?: string;
   status?: 'active' | 'completed' | 'archived';
   /** Title search (§11.2 `?q`). */
   q?: string;

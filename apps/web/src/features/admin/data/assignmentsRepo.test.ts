@@ -104,6 +104,24 @@ describe('directory pages (§11.0.2)', () => {
     expect(page.items[0]).toMatchObject({ name: 'Elena Rossi', isActive: true });
   });
 
+  it('carries the coordinator departmentId on both pickers (design 2026-11-02)', async () => {
+    get.mockResolvedValueOnce({
+      users: [STUDENT],
+      pagination: { page: 1, limit: 10, total: 1 },
+    });
+    get.mockResolvedValueOnce({
+      users: [SUPERVISOR],
+      pagination: { page: 1, limit: 100, total: 1 },
+    });
+
+    await listStudents({ page: 1, limit: 10, departmentId: 'dept-inf' });
+    await listSupervisors({ page: 1, limit: 100, departmentId: 'dept-inf' });
+
+    for (const call of get.mock.calls) {
+      expect(String(call[0])).toContain('departmentId=dept-inf');
+    }
+  });
+
   it('throws on structure drift — no fixture rows in a write-path screen', async () => {
     get.mockResolvedValue({ unexpected: true });
 

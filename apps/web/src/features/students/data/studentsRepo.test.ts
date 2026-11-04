@@ -23,6 +23,7 @@ const USER_1 = {
   firstName: 'Marcus',
   lastName: 'Holloway',
   email: 'm.holloway@university.edu',
+  registrationNumber: 'CST/23/INF/00001',
   role: 'student',
   department: { id: 'd-1', name: 'Informatics', code: 'INF' },
   isActive: true,
@@ -34,6 +35,7 @@ const USER_2 = {
   firstName: 'Sarah',
   lastName: 'Jenkins',
   email: 's.jenkins@university.edu',
+  registrationNumber: null,
   role: 'student',
   department: null,
   isActive: false,
@@ -98,7 +100,7 @@ describe('getStudents (live)', () => {
     expect(snap.rows).toHaveLength(2);
     expect(snap.rows[0]).toMatchObject({
       name: 'Marcus Holloway',
-      code: 'STU-ABCD', // derived: STU- + first 4 cleaned id chars (spec §4)
+      registrationNumber: 'CST/23/INF/00001',
       email: 'm.holloway@university.edu',
       program: 'Informatics',
       status: 'Active',
@@ -108,7 +110,7 @@ describe('getStudents (live)', () => {
     });
     expect(snap.rows[1]).toMatchObject({
       name: 'Sarah Jenkins',
-      code: 'STU-9F8E',
+      registrationNumber: null,
       program: 'Unaffiliated',
       status: 'Inactive',
       thesisStatus: 'NO PROJECT',

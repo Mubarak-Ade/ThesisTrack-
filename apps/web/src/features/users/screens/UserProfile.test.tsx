@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import type { Department } from '@/features/departments/data/types';
 import { ApiError } from '@/lib/api/http';
+import type { PublicUser } from '@/lib/api/http';
+import { useAuthStore } from '@/stores/auth';
 import type { UserDetail } from '../data/types';
 import { getUser, sendInvite, updateUser } from '../data/usersRepo';
 import UserProfile from './UserProfile';
@@ -47,7 +49,6 @@ import { toast } from 'sonner';
 
 const DETAIL: UserDetail = {
   id: '00000000-0000-4000-8000-000000000002',
-  code: 'USR-9012',
   firstName: 'Marcus',
   lastName: 'Holloway',
   email: 'm.holloway@student.edu',
@@ -93,6 +94,7 @@ const renderProfile = (id = DETAIL.id) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useAuthStore.setState({ user: null, status: 'anonymous', accessToken: null });
 });
 
 describe('UserProfile (plan 6)', () => {
@@ -103,8 +105,8 @@ describe('UserProfile (plan 6)', () => {
 
     expect(await screen.findByRole('heading', { name: 'User Profile' })).toBeInTheDocument();
     expect(await screen.findByText('Marcus Holloway')).toBeInTheDocument();
-    // Derived code in the header (mockup parity §5.4 — mockup shows ID: USR-XXXX).
-    expect(screen.getByText(`ID: ${DETAIL.code}`)).toBeInTheDocument();
+    // Registration number in the header (design 2026-11-02 — no dummy code).
+    expect(screen.getByText(`Registration No.: ${DETAIL.registrationNumber}`)).toBeInTheDocument();
     // Header card counters (live theses count + summed milestones).
     expect(screen.getByText('Theses')).toBeInTheDocument();
     expect(screen.getByText('Milestones')).toBeInTheDocument();
@@ -312,5 +314,67 @@ describe('UserProfile enrollment edit (design 2026-10-28)', () => {
       await screen.findByText(/unable to save enrollment details/i),
     ).toBeInTheDocument();
     expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+const COORDINATOR: PublicUser = {
+  id: '00000000-0000-4000-8000-0000000000c1',
+  email: 'cora.coordinator@test.local',
+  firstName: 'Cora',
+  lastName: 'Coordinator',
+  role: 'coordinator',
+  isActive: true,
+  createdAt: '2026-09-01T00:00:00.000Z',
+  department: { id: INF.id, name: INF.name, code: INF.code },
+};
+
+describe('UserProfile coordinator scope (design 2026-11-02)', () => {
+  beforeEach(() => {
+    useAuthStore.setState({
+      user: COORDINATOR,
+      status: 'authenticated',
+      accessToken: 'token',
+    });
+  });
+
+  it('never offers Edit on a coordinator or administrator target', async () => {
+    vi.mocked(getUser).mockResolvedValue({
+      ...DETAIL,
+      role: 'administrator',
+      registrationNumber: null,
+    });
+
+    renderProfile();
+
+    expect(await screen.findByText('Marcus Holloway')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit enrollment' })).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Coordinators cannot edit coordinator or administrator accounts/i),
+    ).toBeInTheDocument();
+  });
+
+  it('locks the department and saves the stored value on a scoped student', async () => {
+    vi.mocked(getUser).mockResolvedValue(DETAIL);
+    vi.mocked(updateUser).mockResolvedValue(DETAIL);
+
+    renderProfile();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit enrollment' }));
+
+    const department = screen.getByLabelText('Department') as HTMLSelectElement;
+    expect(department).toBeDisabled();
+    expect(department.value).toBe(INF.id);
+    expect(screen.getByText('Locked to your department (design 2026-11-02).')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Registration number/i), {
+      target: { value: 'CST/22/INF/00457' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith(DETAIL.id, {
+        registrationNumber: 'CST/22/INF/00457',
+        departmentId: INF.id,
+      }),
+    );
   });
 });

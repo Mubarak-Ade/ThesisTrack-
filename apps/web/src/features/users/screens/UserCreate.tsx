@@ -13,8 +13,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useDepartments } from '@/features/departments/hooks/useDepartments';
 import { ApiError } from '@/lib/api/http';
+import { useAuthStore } from '@/stores/auth';
 import AccountPreview from '../components/AccountPreview';
-import { ROLES } from '../data/constants';
+import { ROLE_LABELS, ROLES } from '../data/constants';
 import type { CreateUserInput, Role } from '../data/types';
 import { createUser } from '../data/usersRepo';
 
@@ -125,17 +126,25 @@ function SectionHead({
 /** Create User Account (spec §5.3) — live `POST /users` write. */
 export default function UserCreate() {
   const navigate = useNavigate();
+  const session = useAuthStore((s) => s.user);
+  // Design 2026-11-02: a coordinator provisions only students/supervisors in
+  // its own department. The server enforces this; the form keeps it visible.
+  const isCoordinator = session?.role === 'coordinator';
+  const lockedDepartment = isCoordinator ? (session?.department ?? null) : null;
+  const roleChoices = isCoordinator
+    ? ROLES.filter((role) => role === 'student' || role === 'supervisor')
+    : ROLES;
+
   const { data: departmentPage, isLoading: departmentsLoading } = useDepartments();
   const departments = useMemo(() => departmentPage?.items ?? [], [departmentPage]);
-  const departmentCodes = useMemo(
-    () =>
-      new Map(
-        departments
-          .filter((department): department is typeof department & { code: string } => !!department.code)
-          .map((department) => [department.id, department.code]),
-      ),
-    [departments],
-  );
+  const departmentCodes = useMemo(() => {
+    const codes = new Map<string, string>();
+    for (const department of departments) {
+      if (department.code) codes.set(department.id, department.code);
+    }
+    if (lockedDepartment?.code) codes.set(lockedDepartment.id, lockedDepartment.code);
+    return codes;
+  }, [departments, lockedDepartment]);
   const schema = useMemo(() => buildSchema(departmentCodes), [departmentCodes]);
 
   const form = useForm<CreateForm>({
@@ -146,7 +155,7 @@ export default function UserCreate() {
       email: '',
       role: '',
       registrationNumber: '',
-      departmentId: '',
+      departmentId: lockedDepartment?.id ?? '',
       // Both onboarding cards default-checked (spec §5.3).
       sendInvite: true,
       enforcePasswordChange: true,
@@ -154,6 +163,20 @@ export default function UserCreate() {
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
+    if (isCoordinator) {
+      if (!lockedDepartment) {
+        form.setError('root', {
+          message: 'Your coordinator account has no department. Contact a super admin.',
+        });
+        return;
+      }
+      if (values.role !== 'student' && values.role !== 'supervisor') {
+        form.setError('root', {
+          message: 'Coordinators can only create students and supervisors.',
+        });
+        return;
+      }
+    }
     try {
       const input: CreateUserInput = {
         firstName: values.firstName,
@@ -161,7 +184,9 @@ export default function UserCreate() {
         email: values.email,
         role: values.role as Role,
         registrationNumber: values.registrationNumber || undefined,
-        departmentId: values.departmentId || undefined,
+        departmentId: isCoordinator
+          ? (lockedDepartment?.id ?? undefined)
+          : values.departmentId || undefined,
       };
       const created = await createUser(input);
       // §A: create auto-provisions the invitation — the toggle only shapes
@@ -356,12 +381,17 @@ export default function UserCreate() {
                       {...form.register('role')}
                     >
                       <option value="">Select a role…</option>
-                      {ROLES.map((role) => (
+                      {roleChoices.map((role) => (
                         <option key={role} value={role}>
-                          {role.charAt(0).toUpperCase() + role.slice(1)}
+                          {ROLE_LABELS[role]}
                         </option>
                       ))}
                     </select>
+                    {isCoordinator && (
+                      <p className="text-xs italic text-muted-foreground">
+                        Coordinators can create students and supervisors only.
+                      </p>
+                    )}
                     {fieldError('role')}
                   </div>
 
@@ -372,23 +402,37 @@ export default function UserCreate() {
                     <select
                       id="uc-department"
                       className={SELECT_CLASS}
-                      disabled={departmentsLoading}
+                      disabled={departmentsLoading || isCoordinator}
                       aria-invalid={!!errors.departmentId}
                       {...form.register('departmentId')}
                     >
-                      <option value="">
-                        {departmentsLoading ? 'Loading departments…' : 'Unaffiliated (default workflow)'}
-                      </option>
-                      {departments.map((department) => (
-                        <option key={department.id} value={department.id}>
-                          {department.name}
-                          {department.code ? ` (${department.code})` : ''}
+                      {!isCoordinator && (
+                        <option value="">
+                          {departmentsLoading ? 'Loading departments…' : 'Unaffiliated (default workflow)'}
                         </option>
-                      ))}
+                      )}
+                      {isCoordinator ? (
+                        lockedDepartment ? (
+                          <option value={lockedDepartment.id}>
+                            {lockedDepartment.name}
+                            {lockedDepartment.code ? ` (${lockedDepartment.code})` : ''}
+                          </option>
+                        ) : (
+                          <option value="">No department assigned</option>
+                        )
+                      ) : (
+                        departments.map((department) => (
+                          <option key={department.id} value={department.id}>
+                            {department.name}
+                            {department.code ? ` (${department.code})` : ''}
+                          </option>
+                        ))
+                      )}
                     </select>
                     <p className="text-xs italic text-muted-foreground">
-                      The managed list also picks the student&apos;s workflow (ADR-16). Leave blank for
-                      unaffiliated: the default workflow applies.
+                      {isCoordinator
+                        ? 'Locked to your department (design 2026-11-02).'
+                        : 'The managed list also picks the student’s workflow (ADR-16). Leave blank for unaffiliated: the default workflow applies.'}
                     </p>
                     {fieldError('departmentId')}
                   </div>

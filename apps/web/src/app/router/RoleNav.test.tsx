@@ -145,6 +145,31 @@ describe('role-aware shell (spec §10.3/§10.5)', () => {
     expect(within(rail).queryByText('My Project')).toBeNull();
   });
 
+  it('coordinator → the admin column without Departments (design 2026-11-02)', async () => {
+    installAdapter(adapterFor('coordinator'));
+
+    renderApp('/dashboard');
+    const rail = await sidebar();
+
+    for (const label of [
+      'Dashboard',
+      'Faculty',
+      'Students',
+      'Projects',
+      'Proposals',
+      'Assignments',
+      'Workflows',
+      'Monitoring',
+      'Reports',
+      'Notifications',
+      'Settings',
+    ]) {
+      expect(within(rail).getByText(label), `coordinator nav: ${label}`).toBeTruthy();
+    }
+    expect(within(rail).queryByText('Departments')).toBeNull();
+    expect(within(rail).queryByText('My Project')).toBeNull();
+  });
+
   it('supervisor → the §10.5 supervisor column, no admin-only entries', async () => {
     installAdapter(adapterFor('supervisor'));
 

@@ -75,6 +75,12 @@ export async function listProjects(
     // "all rows" to some planners and "none" to others — never gamble).
     conditions.push(inArray(projects.id, filters.projectIds));
   }
+  if (filters.departmentId) {
+    // Coordinator scope (ADR-17) — the project's student owns the department.
+    conditions.push(
+      sql`exists (select 1 from users u where u.id = ${projects.studentId} and u.department_id = ${filters.departmentId})`,
+    );
+  }
   if (filters.status) {
     conditions.push(eq(projects.status, filters.status));
   }

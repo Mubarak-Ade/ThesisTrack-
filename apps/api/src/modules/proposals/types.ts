@@ -65,6 +65,8 @@ export interface ProposalListFilters {
   studentIds?: string[];
   /** Explicit `?studentId=` filter (administrator only; others pre-authorized). */
   studentId?: string;
+  /** Coordinator scope: only students in this department (ADR-17). */
+  departmentId?: string;
   status?: ProposalStatus;
   page: number;
   limit: number;

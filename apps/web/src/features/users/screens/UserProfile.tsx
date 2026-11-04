@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import FormMessage from '@/components/forms/FormMessage';
 import { useDepartments } from '@/features/departments/hooks/useDepartments';
 import { ApiError } from '@/lib/api/http';
+import { useAuthStore } from '@/stores/auth';
 import ContactCard from '../components/ContactCard';
 import StatusBadge from '../components/StatusBadge';
 import {
@@ -78,6 +79,16 @@ function EnrollmentPanel({
   const { data: departmentPage, isLoading: departmentsLoading } = useDepartments();
   const departments = departmentPage?.items ?? [];
   const selectedDepartment = departments.find((department) => department.id === departmentId);
+  const session = useAuthStore((s) => s.user);
+  const isCoordinator = session?.role === 'coordinator';
+  // A coordinator manages students/supervisors in its own department only; an
+  // elevated account (or its own) is a strict 404 at the API, so never offer
+  // the edit control (design 2026-11-02).
+  const elevatedTarget =
+    detail.role === 'coordinator' ||
+    detail.role === 'administrator' ||
+    detail.id === session?.id;
+  const locked = isCoordinator && elevatedTarget;
 
   const cancel = () => {
     setRegistrationNumber(detail.registrationNumber ?? '');
@@ -107,7 +118,11 @@ function EnrollmentPanel({
     try {
       const updated = await updateUser(detail.id, {
         registrationNumber: trimmedRegistration || null,
-        departmentId: departmentId || null,
+        // A coordinator's department control is locked; keep the stored value
+        // (the API would 403 a cross-department body anyway).
+        departmentId: isCoordinator
+          ? (detail.department?.id ?? null)
+          : departmentId || null,
       });
       onUpdated(updated);
       setEditing(false);
@@ -135,7 +150,7 @@ function EnrollmentPanel({
               Registration &amp; Department
             </h2>
           </div>
-          {!editing && (
+          {!editing && !locked && (
             <Button
               type="button"
               variant="outline"
@@ -148,6 +163,12 @@ function EnrollmentPanel({
             </Button>
           )}
         </div>
+
+        {locked && (
+          <p className="mt-3 text-xs italic text-muted-foreground">
+            Coordinators cannot edit coordinator or administrator accounts.
+          </p>
+        )}
 
         {editing ? (
           <div className="mt-4 space-y-3">
@@ -184,19 +205,31 @@ function EnrollmentPanel({
                 id="up-department"
                 className={SELECT_CLASS}
                 value={departmentId}
-                disabled={departmentsLoading}
+                disabled={departmentsLoading || isCoordinator}
                 onChange={(event) => setDepartmentId(event.target.value)}
               >
-                <option value="">Unaffiliated (default workflow)</option>
-                {departments.map((department) => (
-                  <option key={department.id} value={department.id}>
-                    {department.name}
-                    {department.code ? ` (${department.code})` : ''}
+                {isCoordinator ? (
+                  <option value={detail.department?.id ?? ''}>
+                    {detail.department
+                      ? `${detail.department.name}${detail.department.code ? ` (${detail.department.code})` : ''}`
+                      : 'No department'}
                   </option>
-                ))}
+                ) : (
+                  <>
+                    <option value="">Unaffiliated (default workflow)</option>
+                    {departments.map((department) => (
+                      <option key={department.id} value={department.id}>
+                        {department.name}
+                        {department.code ? ` (${department.code})` : ''}
+                      </option>
+                    ))}
+                  </>
+                )}
               </select>
               <p className="text-xs italic text-muted-foreground">
-                ADR-16: the department selects the student&apos;s workflow at approval.
+                {isCoordinator
+                  ? 'Locked to your department (design 2026-11-02).'
+                  : 'ADR-16: the department selects the student’s workflow at approval.'}
               </p>
             </div>
             {error && <FormMessage>{error}</FormMessage>}
@@ -298,7 +331,7 @@ export default function UserProfile() {
             </h1>
             {detail && (
               <p className="mt-1 font-mono text-sm text-muted-foreground">
-                ID: {detail.code || detail.id}
+                Registration No.: {detail.registrationNumber ?? '—'}
               </p>
             )}
           </div>

@@ -98,9 +98,21 @@ export const patchWorkflowSchema = z
     }
   });
 
+/**
+ * POST /workflows/:workflowId/duplicate — "duplicate as a new version"
+ * (§12.2). The new definition names itself; the department is inherited from
+ * the source (a coordinator cannot retarget it). `academicSession` defaults to
+ * the source's when omitted, so a plain version bump needs only `name`.
+ */
+export const duplicateWorkflowSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required').max(255),
+  academicSession: z.string().max(32).nullable().optional(),
+});
+
 export type WorkflowParams = z.infer<typeof workflowParamsSchema>;
 export type StageProjectParams = z.infer<typeof projectIdParamsSchema>;
 export type StageInput = z.infer<typeof stageInputSchema>;
 export type ListWorkflowsQuery = z.infer<typeof listWorkflowsQuerySchema>;
 export type CreateWorkflowInput = z.infer<typeof createWorkflowSchema>;
 export type PatchWorkflowInput = z.infer<typeof patchWorkflowSchema>;
+export type DuplicateWorkflowInput = z.infer<typeof duplicateWorkflowSchema>;

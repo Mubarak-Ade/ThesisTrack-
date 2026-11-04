@@ -99,15 +99,15 @@ describe('routing (spec §3)', () => {
 
     renderAt('/dashboard');
 
-    // Coordinator Dashboard heading (screen) + real name (sidebar footer).
+    // Oversight Dashboard heading (screen) + real name (sidebar footer).
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: 'Coordinator Dashboard' })).toBeTruthy(),
+      expect(screen.getByRole('heading', { name: 'Super Admin Dashboard' })).toBeTruthy(),
     );
     expect(screen.getByText('Benjamin S. Thompson')).toBeTruthy();
     const sidebar = document.querySelector('aside[aria-label="Sidebar"]');
     expect(sidebar).toBeTruthy();
     // Scoped to the sidebar: the workspace table has its own headers.
-    expect(within(sidebar as HTMLElement).getByText('Administrator')).toBeTruthy();
+    expect(within(sidebar as HTMLElement).getByText('Super Admin')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sign Out' })).toBeTruthy();
 
     client.defaults.adapter = originalAdapter;

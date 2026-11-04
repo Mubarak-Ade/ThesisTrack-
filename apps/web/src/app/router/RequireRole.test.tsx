@@ -25,6 +25,16 @@ const student: PublicUser = {
   createdAt: '2026-09-01T00:00:00.000Z',
 };
 
+const coordinator: PublicUser = {
+  id: 'u-coordinator',
+  email: 'cora.coordinator@university.edu',
+  firstName: 'Cora',
+  lastName: 'Coordinator',
+  role: 'coordinator',
+  isActive: true,
+  createdAt: '2026-09-01T00:00:00.000Z',
+};
+
 /** Wraps the guard on `path` with public /forbidden + /unauthorized targets. */
 function renderGuarded(path: string) {
   return render(
@@ -109,5 +119,44 @@ describe('RequireRole (spec §10.3)', () => {
 
     expect(screen.getByText('forbidden destination')).toBeTruthy();
     expect(screen.queryByText('reports screen')).toBeNull();
+  });
+
+  it('coordinator passes the shared admin subtree (design 2026-11-02)', () => {
+    useAuthStore.setState({ user: coordinator, accessToken: 'tok', status: 'authenticated' });
+
+    render(
+      <MemoryRouter initialEntries={['/workflows']}>
+        <Routes>
+          <Route path="/forbidden" element={<div>forbidden destination</div>} />
+          <Route element={<RequireRole roles={['administrator', 'coordinator']} />}>
+            <Route path="/workflows" element={<div>workflow screen</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('workflow screen')).toBeTruthy();
+    expect(screen.queryByText('forbidden destination')).toBeNull();
+  });
+
+  it('coordinator is bounced from the nested super-admin departments route', () => {
+    useAuthStore.setState({ user: coordinator, accessToken: 'tok', status: 'authenticated' });
+
+    render(
+      <MemoryRouter initialEntries={['/departments']}>
+        <Routes>
+          <Route path="/forbidden" element={<div>forbidden destination</div>} />
+          <Route element={<RequireRole roles={['administrator', 'coordinator']} />}>
+            <Route path="/workflows" element={<div>workflow screen</div>} />
+            <Route element={<RequireRole roles={['administrator']} />}>
+              <Route path="/departments" element={<div>departments screen</div>} />
+            </Route>
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('forbidden destination')).toBeTruthy();
+    expect(screen.queryByText('departments screen')).toBeNull();
   });
 });

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import SampleDataBanner from '@/components/feedback/SampleDataBanner';
+import { useAuthStore } from '@/stores/auth';
 import { getDashboard } from '../data';
 import type { DashboardData } from '../data/types';
 import { exportWorkspaceCsv } from '../lib/exportWorkspace';
@@ -15,10 +16,21 @@ import TasksRail from '../components/TasksRail';
 import WorkspaceTable from '../components/WorkspaceTable';
 
 /**
- * Coordinator Dashboard (spec §5.1) — all figures come from `dashboardRepo`
- * (live API first; fixture fallback announces itself via SampleDataBanner).
+ * Oversight Dashboard (spec §5.1) — shared by the super admin (institution
+ * wide) and a coordinator (their department, design 2026-11-02). All figures
+ * come from `dashboardRepo` (live API first; fixture fallback announces
+ * itself via SampleDataBanner), and every probe is already role-scoped by the
+ * API. Only the chrome differs: title, breadcrumb and scope label.
  */
-export default function CoordinatorDashboard() {
+export default function OversightDashboard() {
+  const user = useAuthStore((s) => s.user);
+  const isCoordinator = user?.role === 'coordinator';
+  const title = isCoordinator ? 'Coordinator Dashboard' : 'Super Admin Dashboard';
+  const breadcrumb = isCoordinator ? 'Coordinator' : 'Super Admin';
+  const scope = isCoordinator
+    ? (user?.department?.name ?? 'Your department')
+    : 'All departments';
+
   const [data, setData] = useState<DashboardData | null>(null);
 
   useEffect(() => {
@@ -38,15 +50,18 @@ export default function CoordinatorDashboard() {
         aria-label="Breadcrumb"
         className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
       >
-        <span>Admin</span>
+        <span>{breadcrumb}</span>
         <span aria-hidden="true">›</span>
         <span className="text-foreground">Dashboard</span>
       </nav>
 
       <header className="mt-3 flex flex-wrap items-start justify-between gap-3">
-        <h1 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
-          Coordinator Dashboard
-        </h1>
+        <div>
+          <h1 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
+            {title}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">Scope: {scope}</p>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"

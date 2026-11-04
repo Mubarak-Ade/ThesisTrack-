@@ -12,6 +12,7 @@ import EmptyState from '@/components/feedback/EmptyState';
 import ErrorState from '@/components/feedback/ErrorState';
 import LoadingState from '@/components/feedback/LoadingState';
 import { formatRelative } from '@/lib/utils/time';
+import { useAuthStore } from '@/stores/auth';
 import {
   useAssignmentWrite,
   useStudentAssignment,
@@ -164,6 +165,13 @@ function AssignmentRow({
 }
 
 export default function AdminAssignments() {
+  const session = useAuthStore((s) => s.user);
+  // Design 2026-11-02: a coordinator only assigns within its own department.
+  // The API enforces it; the request carries the department so the pickers ask
+  // for exactly the scoped rows (the super admin keeps the cross-department
+  // perspective and its warning).
+  const isCoordinator = session?.role === 'coordinator';
+  const departmentId = isCoordinator ? session?.department?.id : undefined;
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
@@ -172,8 +180,8 @@ export default function AdminAssignments() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
 
-  const students = useStudents({ page, limit: PAGE_SIZE, q: q || undefined });
-  const supervisors = useSupervisors({ limit: 100 });
+  const students = useStudents({ page, limit: PAGE_SIZE, q: q || undefined, departmentId });
+  const supervisors = useSupervisors({ limit: 100, departmentId });
   const write = useAssignmentWrite();
   const data = students.data;
   const pageCount = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
@@ -238,6 +246,9 @@ export default function AdminAssignments() {
         ))}
       </select>
       <span className="mt-1 block text-xs text-muted-foreground">
+        {isCoordinator
+          ? 'Only students and supervisors in your department are offered (design 2026-11-02). '
+          : 'Cross-department assignments are allowed for super admins. '}
         One active supervisor per student (I13); inactive accounts cannot be chosen (422).
       </span>
     </label>
@@ -263,6 +274,15 @@ export default function AdminAssignments() {
             Flow C (§5.3): assign, change or end a student&apos;s supervisor. Each student has
             at most one active supervisor; history is never deleted (I12/I13).
           </p>
+          <p className="mt-1 text-xs font-medium text-muted-foreground">
+            Scope: {isCoordinator ? (session?.department?.name ?? 'Your department') : 'All departments'}
+          </p>
+          {!isCoordinator && (
+            <p className="mt-1 max-w-2xl text-xs italic text-muted-foreground">
+              Super admins can assign across departments — confirm the student and supervisor
+              belong together before saving.
+            </p>
+          )}
         </div>
       </header>
 

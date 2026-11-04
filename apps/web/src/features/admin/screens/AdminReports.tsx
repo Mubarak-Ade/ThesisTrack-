@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import ErrorState from '@/components/feedback/ErrorState';
 import LoadingState from '@/components/feedback/LoadingState';
 import { downloadCsv } from '@/lib/csv';
+import { useAuthStore } from '@/stores/auth';
 import { useBuildReport, useReportCounts } from '../hooks';
 import type { ReportKey } from '../data';
 
@@ -61,6 +62,9 @@ function StatCard({ label, value, sub }: { label: string; value: number; sub?: s
 export default function AdminReports() {
   const counts = useReportCounts();
   const build = useBuildReport();
+  const user = useAuthStore((s) => s.user);
+  const isCoordinator = user?.role === 'coordinator';
+  const scope = isCoordinator ? (user?.department?.name ?? 'Your department') : 'All departments';
   const [lastAt, setLastAt] = useState<string | null>(null);
 
   const exportCsv = (key: ReportKey) => {
@@ -96,7 +100,7 @@ export default function AdminReports() {
         aria-label="Breadcrumb"
         className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
       >
-        <span>Admin</span>
+        <span>{isCoordinator ? 'Coordinator' : 'Super Admin'}</span>
         <span aria-hidden="true">›</span>
         <span className="text-foreground">Reports</span>
       </nav>
@@ -110,6 +114,7 @@ export default function AdminReports() {
           ({lastAt ? `last refreshed ${lastAt}` : 'never cached'}), exports are built on
           click as client-side CSV (§16.3).
         </p>
+        <p className="mt-1 text-xs font-medium text-muted-foreground">Scope: {scope}</p>
       </header>
 
       <section aria-label="Headline counts" className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

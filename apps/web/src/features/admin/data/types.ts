@@ -86,6 +86,8 @@ export interface DirectoryPageArgs {
   page: number;
   limit: number;
   q?: string;
+  /** Coordinator scope (design 2026-11-02) — the API also enforces it. */
+  departmentId?: string;
 }
 
 export interface DirectoryPage<T> {
@@ -130,6 +132,16 @@ export interface WorkflowStage {
 export interface WorkflowDetail {
   workflow: WorkflowSummary;
   stages: WorkflowStage[];
+}
+
+/** POST /workflows/:workflowId/duplicate — the new version + the archived source. */
+export interface DuplicateWorkflowResult extends WorkflowDetail {
+  archivedWorkflowId: string | null;
+}
+
+export interface DuplicateWorkflowInput {
+  name: string;
+  academicSession?: string | null;
 }
 
 /** Editable stage shape: `id` present = update in place, absent = new (§11.14). */

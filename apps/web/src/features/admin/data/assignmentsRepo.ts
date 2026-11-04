@@ -29,6 +29,7 @@ export async function listStudents(args: DirectoryPageArgs): Promise<DirectoryPa
   });
   const q = args.q?.trim();
   if (q) params.set('q', q);
+  if (args.departmentId) params.set('departmentId', args.departmentId);
   const page = mapPaged<DirectoryStudent>(
     await api.get<unknown>(`/users?${params}`),
     'users',
@@ -48,6 +49,7 @@ export async function listSupervisors(
   });
   const q = args.q?.trim();
   if (q) params.set('q', q);
+  if (args.departmentId) params.set('departmentId', args.departmentId);
   const page = mapPaged<DirectorySupervisor>(
     await api.get<unknown>(`/users?${params}`),
     'users',

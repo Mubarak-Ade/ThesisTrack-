@@ -20,7 +20,6 @@ const EEE: DepartmentRef = { id: '00000000-0000-4000-8000-000000000106', name: '
 export const MOCK_USERS: ConsoleUser[] = [
   {
     id: '00000000-0000-4000-8000-000000000001',
-    code: 'USR-8821',
     firstName: 'Dr. Elena',
     lastName: 'Rossi',
     email: 'e.rossi@university.edu',
@@ -34,7 +33,6 @@ export const MOCK_USERS: ConsoleUser[] = [
   },
   {
     id: '00000000-0000-4000-8000-000000000002',
-    code: 'USR-9012',
     firstName: 'Marcus',
     lastName: 'Holloway',
     email: 'm.holloway@student.edu',
@@ -48,7 +46,6 @@ export const MOCK_USERS: ConsoleUser[] = [
   },
   {
     id: '00000000-0000-4000-8000-000000000003',
-    code: 'USR-7734',
     firstName: 'Prof. Sarah',
     lastName: 'Blake',
     email: 's.blake@university.edu',
@@ -62,7 +59,6 @@ export const MOCK_USERS: ConsoleUser[] = [
   },
   {
     id: '00000000-0000-4000-8000-000000000004',
-    code: 'USR-1102',
     firstName: 'Anita',
     lastName: 'Desai',
     email: 'a.desai@student.edu',
@@ -76,7 +72,6 @@ export const MOCK_USERS: ConsoleUser[] = [
   },
   {
     id: '00000000-0000-4000-8000-000000000005',
-    code: 'USR-4421',
     firstName: 'Dr. Alistair',
     lastName: 'Vance',
     email: 'a.vance@university.edu',
@@ -90,7 +85,6 @@ export const MOCK_USERS: ConsoleUser[] = [
   },
   {
     id: '00000000-0000-4000-8000-000000000006',
-    code: 'USR-5589',
     firstName: 'Robert',
     lastName: 'Chen',
     email: 'r.chen@student.edu',
@@ -104,7 +98,6 @@ export const MOCK_USERS: ConsoleUser[] = [
   },
   {
     id: '00000000-0000-4000-8000-000000000007',
-    code: 'USR-3310',
     firstName: 'Prof. Thomas',
     lastName: 'Miller',
     email: 't.miller@university.edu',
@@ -118,7 +111,6 @@ export const MOCK_USERS: ConsoleUser[] = [
   },
   {
     id: '00000000-0000-4000-8000-000000000008',
-    code: 'USR-6644',
     firstName: 'Sarah',
     lastName: 'Jenkins',
     email: 's.jenkins@student.edu',
@@ -133,7 +125,6 @@ export const MOCK_USERS: ConsoleUser[] = [
   },
   {
     id: '00000000-0000-4000-8000-000000000009',
-    code: 'USR-1142',
     firstName: "Liam",
     lastName: "O'Connor",
     email: 'l.oconnor@student.edu',
@@ -147,7 +138,6 @@ export const MOCK_USERS: ConsoleUser[] = [
   },
   {
     id: '00000000-0000-4000-8000-000000000010',
-    code: 'USR-9201',
     firstName: 'Ibrahim',
     lastName: 'Musa',
     email: 'i.musa@student.edu',
@@ -161,7 +151,6 @@ export const MOCK_USERS: ConsoleUser[] = [
   },
   {
     id: '00000000-0000-4000-8000-000000000011',
-    code: 'USR-2287',
     firstName: 'Prof. Amara',
     lastName: 'Okafor',
     email: 'a.okafor@university.edu',
@@ -175,7 +164,6 @@ export const MOCK_USERS: ConsoleUser[] = [
   },
   {
     id: '00000000-0000-4000-8000-000000000012',
-    code: 'USR-7050',
     firstName: 'Yuki',
     lastName: 'Tanaka',
     email: 'y.tanaka@student.edu',

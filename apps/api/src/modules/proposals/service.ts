@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { db } from '../../config/db.js';
+import { departmentScope } from '../../authz/scope.js';
 import {
   AuthorizationError,
   BusinessRuleError,
@@ -88,8 +89,8 @@ export const PROPOSAL_ACTION_ROLES = {
   attach: ['student'],
   detach: ['student'],
   submit: ['student'],
-  'start-review': ['supervisor', 'administrator'],
-  review: ['supervisor', 'administrator'],
+  'start-review': ['supervisor', 'administrator', 'coordinator'],
+  review: ['supervisor', 'administrator', 'coordinator'],
 } as const satisfies Record<ProposalAction, readonly Role[]>;
 
 /* --------------------------------------------------------------- helpers */
@@ -231,9 +232,20 @@ export async function listProposalsFor(
     }
   }
 
+  // Coordinator scope (ADR-17) is a department predicate, not a student list.
+  const departmentId =
+    actor.role === 'coordinator' ? (departmentScope(actor) ?? undefined) : undefined;
+  if (actor.role === 'coordinator' && query.studentId) {
+    const target = await findUserById(query.studentId);
+    if (!target || target.departmentId !== actor.departmentId) {
+      throw new AuthorizationError('You do not have access to this student');
+    }
+  }
+
   const { rows, total } = await repo.listProposals({
     studentIds,
-    studentId: actor.role === 'administrator' ? query.studentId : undefined,
+    studentId: actor.role === 'administrator' || actor.role === 'coordinator' ? query.studentId : undefined,
+    departmentId,
     status: query.status,
     page: query.page,
     limit: query.limit,

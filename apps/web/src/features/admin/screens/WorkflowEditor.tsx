@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, GitBranch, Plus, Star, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Copy, GitBranch, Plus, Star, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import ConfirmDialog from '@/components/feedback/ConfirmDialog';
 import ErrorState from '@/components/feedback/ErrorState';
 import LoadingState from '@/components/feedback/LoadingState';
 import { useDepartments } from '@/features/departments/hooks/useDepartments';
+import { useAuthStore } from '@/stores/auth';
 import { useWorkflow, useWorkflowWrite } from '../hooks';
 import type { ResponsibleRole, StageInput } from '../data';
 
@@ -75,12 +76,17 @@ export default function WorkflowEditor() {
   const navigate = useNavigate();
   const query = useWorkflow(workflowId);
   const write = useWorkflowWrite();
+  const session = useAuthStore((s) => s.user);
+  const isCoordinator = session?.role === 'coordinator';
   const { data: departmentPage, isLoading: departmentsLoading } = useDepartments();
   const departments = departmentPage?.items ?? [];
 
   const [meta, setMeta] = useState({ name: '', departmentId: '', academicSession: '', description: '' });
   const [stages, setStages] = useState<StageDraft[]>([]);
   const [setDefaultOpen, setSetDefaultOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [duplicateName, setDuplicateName] = useState('');
+  const [duplicateSession, setDuplicateSession] = useState('');
   const hydratedFor = useRef<string | null>(null);
 
   const detail = query.data;
@@ -143,7 +149,9 @@ export default function WorkflowEditor() {
         workflowId: workflowId!,
         input: {
           name: meta.name.trim(),
-          departmentId: meta.departmentId || null,
+          // A coordinator cannot send `departmentId` at all: the API answers
+          // 403 even when the value is unchanged (design 2026-11-02).
+          ...(isCoordinator ? {} : { departmentId: meta.departmentId || null }),
           academicSession: meta.academicSession.trim() || null,
           description: meta.description.trim() || null,
           stages: payload,
@@ -180,6 +188,81 @@ export default function WorkflowEditor() {
     );
   };
 
+  const openDuplicate = (name: string, academicSession: string | null) => {
+    setDuplicateName(academicSession ? `${name} (${academicSession})` : `${name} (new version)`);
+    setDuplicateSession(academicSession ?? '');
+    setDuplicateOpen(true);
+  };
+
+  const duplicate = () => {
+    const name = duplicateName.trim();
+    if (!name) {
+      toast.error('Workflow name is required.');
+      return;
+    }
+    write.mutate(
+      {
+        action: 'duplicate',
+        workflowId: workflowId!,
+        input: { name, academicSession: duplicateSession.trim() || null },
+      },
+      {
+        onSuccess: (result) => {
+          if (!result || !('workflow' in result)) return;
+          toast.success('New version created — the source was archived (ADR-17).');
+          setDuplicateOpen(false);
+          navigate(`/workflows/${result.workflow.id}`);
+        },
+        onError: (error) => toast.error(error.message),
+      },
+    );
+  };
+
+  const duplicateDialog = (
+    <ConfirmDialog
+      open={duplicateOpen}
+      title="Duplicate as a new version"
+      description={
+        <span className="block space-y-3">
+          <span className="block">
+            The source is archived and a new active definition copies every stage, description and
+            gate (design 2026-11-02). Existing project snapshots are untouched (ADR-15).
+          </span>
+          <label className="block">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              New workflow name *
+            </span>
+            <Input
+              aria-label="New workflow name"
+              value={duplicateName}
+              onChange={(event) => setDuplicateName(event.target.value)}
+              className="mt-1.5"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Academic session
+            </span>
+            <Input
+              aria-label="Academic session"
+              value={duplicateSession}
+              onChange={(event) => setDuplicateSession(event.target.value)}
+              placeholder="e.g. 2027/2028"
+              className="mt-1.5"
+            />
+          </label>
+          <span className="block text-xs">
+            The department cannot change. A 409 means another active workflow still holds the slot.
+          </span>
+        </span>
+      }
+      confirmLabel="Duplicate"
+      loading={write.isPending}
+      onConfirm={duplicate}
+      onCancel={() => setDuplicateOpen(false)}
+    />
+  );
+
   if (query.isPending) return <LoadingState label="Loading workflow…" />;
   if (query.isError || !detail) {
     return (
@@ -198,6 +281,81 @@ export default function WorkflowEditor() {
   }
 
   const workflow = detail.workflow;
+
+  // A coordinator cannot edit or restore an archived definition (design
+  // 2026-11-02); duplication is its only forward action.
+  if (isCoordinator && workflow.archivedAt) {
+    return (
+      <div className="mx-auto w-full max-w-[900px] px-4 py-6 sm:px-6 sm:py-8">
+        <nav
+          aria-label="Breadcrumb"
+          className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+        >
+          <Link to="/workflows" className="transition-colors hover:text-primary">
+            Workflows
+          </Link>
+          <span aria-hidden="true">›</span>
+          <span className="text-foreground">{workflow.name}</span>
+        </nav>
+
+        <header className="mt-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
+              {workflow.name}
+            </h1>
+            <p className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Archived
+              </span>
+              {workflow.description ?? 'Archived workflow definition.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => openDuplicate(workflow.name, workflow.academicSession)}
+            >
+              <Copy aria-hidden="true" />
+              Duplicate as new version
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/workflows">Back to list</Link>
+            </Button>
+          </div>
+        </header>
+
+        <p className="mt-4 rounded-lg border border-border bg-surface-alt/60 px-4 py-3 text-sm text-muted-foreground">
+          Archived definitions are read-only. Duplicate this version to start a new active
+          workflow for your department.
+        </p>
+
+        <Card className="mt-6">
+          <CardContent className="p-5 sm:p-6">
+            <h2 className="font-display text-lg font-bold text-foreground">Stages</h2>
+            <ol className="mt-3 space-y-2">
+              {detail.stages.map((stage) => (
+                <li
+                  key={stage.id}
+                  className="flex items-baseline gap-3 border-b border-border/70 pb-2 last:border-0 last:pb-0"
+                >
+                  <span className="text-xs font-bold text-primary">{stage.position}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">{stage.name}</p>
+                    {stage.description && (
+                      <p className="text-xs text-muted-foreground">{stage.description}</p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </CardContent>
+        </Card>
+
+        {duplicateDialog}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-[900px] px-4 py-6 sm:px-6 sm:py-8">
@@ -232,7 +390,15 @@ export default function WorkflowEditor() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {!workflow.isDefault && !workflow.archivedAt && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => openDuplicate(workflow.name, workflow.academicSession)}
+          >
+            <Copy aria-hidden="true" />
+            Duplicate as new version
+          </Button>
+          {!isCoordinator && !workflow.isDefault && !workflow.archivedAt && (
             <Button type="button" variant="outline" onClick={() => setSetDefaultOpen(true)}>
               <Star aria-hidden="true" />
               Set default
@@ -261,21 +427,31 @@ export default function WorkflowEditor() {
             <select
               id="wf-department"
               value={meta.departmentId}
-              disabled={departmentsLoading}
+              disabled={departmentsLoading || isCoordinator}
               onChange={(event) => setMeta((m) => ({ ...m, departmentId: event.target.value }))}
               className="mt-1.5 flex h-11 w-full rounded-md border border-input bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             >
-              <option value="">
-                {departmentsLoading ? 'Loading departments…' : 'Any (default / fallback)'}
-              </option>
-              {departments.map((department) => (
-                <option key={department.id} value={department.id}>
-                  {department.name}
+              {isCoordinator ? (
+                <option value={workflow.department?.id ?? ''}>
+                  {workflow.department?.name ?? 'No department'}
                 </option>
-              ))}
+              ) : (
+                <>
+                  <option value="">
+                    {departmentsLoading ? 'Loading departments…' : 'Any (default / fallback)'}
+                  </option>
+                  {departments.map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {department.name}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
             <p className="mt-1.5 text-xs italic text-muted-foreground">
-              One ACTIVE workflow per department (FR-CW-08). Blank is the ADR-16 fallback.
+              {isCoordinator
+                ? 'Locked to your department (design 2026-11-02).'
+                : 'One ACTIVE workflow per department (FR-CW-08). Blank is the ADR-16 fallback.'}
             </p>
           </label>
           <label className="block">
@@ -492,6 +668,8 @@ export default function WorkflowEditor() {
         onConfirm={setDefault}
         onCancel={() => setSetDefaultOpen(false)}
       />
+
+      {duplicateDialog}
     </div>
   );
 }

@@ -138,10 +138,10 @@ export default function UserList() {
   const exportCsv = () => {
     downloadCsv(
       `thesistrack-users-page-${page}.csv`,
-      ['Name', 'Code', 'Email', 'Role', 'Department', 'Status', 'Last Login'],
+      ['Name', 'Registration No.', 'Email', 'Role', 'Department', 'Status', 'Last Login'],
       rows.map((user) => [
         `${user.firstName} ${user.lastName}`,
-        user.code ?? '',
+        user.registrationNumber ?? '',
         user.email,
         user.role,
         user.department?.name ?? '',

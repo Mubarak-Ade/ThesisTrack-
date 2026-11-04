@@ -13,7 +13,8 @@ import { useAuthStore } from '@/stores/auth';
 import { usePasswordReset, useProfile } from '../hooks/useSettings';
 
 const ROLE_LABEL: Record<string, string> = {
-  administrator: 'Administrator',
+  administrator: 'Super Admin',
+  coordinator: 'Coordinator',
   supervisor: 'Supervisor',
   student: 'Student',
 };

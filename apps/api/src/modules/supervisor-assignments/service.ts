@@ -7,6 +7,7 @@ import {
 } from '../../errors/index.js';
 import { db } from '../../config/db.js';
 import { notify } from '../../lib/notify.js';
+import type { AuthUser } from '../../middleware/auth.js';
 import { getProjectById } from '../projects/service.js';
 import { findUserById, toPublicUser } from '../users/service.js';
 import { projects } from '../../schema/index.js';
@@ -166,6 +167,30 @@ async function loadStudent(studentId: string): Promise<UserWithDepartment> {
 }
 
 /**
+ * Assignment writes are department-scoped for coordinators (ADR-17). The
+ * student and the target supervisor must both belong to the coordinator's
+ * department; anything else is a missing resource (404).
+ */
+function assertCoordinatorStudentScope(actor: AuthUser, student: UserWithDepartment): void {
+  if (actor.role !== 'coordinator') return;
+  if (!actor.departmentId || student.departmentId !== actor.departmentId) {
+    throw new NotFoundError('Student');
+  }
+}
+
+/** Same rule for the target supervisor — checked before student-state conflicts. */
+async function assertCoordinatorSupervisorScope(
+  actor: AuthUser,
+  supervisorId: string,
+): Promise<void> {
+  if (actor.role !== 'coordinator') return;
+  const user = await findUserById(supervisorId);
+  if (!user || !actor.departmentId || user.departmentId !== actor.departmentId) {
+    throw new NotFoundError('Supervisor');
+  }
+}
+
+/**
  * The student's project, if one exists yet.
  *
  * Called only on the `/students/...` path, where the caller has no `projectId`
@@ -188,6 +213,7 @@ async function resolveProjectForStudent(studentId: string): Promise<string | nul
  */
 async function validateTargetSupervisor(
   supervisorId: string,
+  actor: AuthUser,
 ): Promise<UserWithDepartment> {
   const user = await findUserById(supervisorId);
   if (!user) {
@@ -204,6 +230,11 @@ async function validateTargetSupervisor(
     throw new BusinessRuleError('Cannot assign a deactivated supervisor', [
       { path: 'supervisorId', message: 'Cannot assign a deactivated supervisor' },
     ]);
+  }
+  if (actor.role === 'coordinator') {
+    if (!actor.departmentId || user.departmentId !== actor.departmentId) {
+      throw new NotFoundError('Supervisor');
+    }
   }
   return user;
 }
@@ -224,10 +255,10 @@ const ALREADY_SUPERVISING = 'This supervisor already supervises this student';
 export async function assign(
   projectId: string,
   supervisorId: string,
-  actorId: string,
+  actor: AuthUser,
 ): Promise<AssignmentView> {
   const project = await loadActiveProject(projectId);
-  return assignToStudent(project.studentId, supervisorId, actorId, projectId);
+  return assignToStudent(project.studentId, supervisorId, actor, projectId);
 }
 
 /**
@@ -238,16 +269,20 @@ export async function assign(
 export async function assignToStudent(
   studentId: string,
   supervisorId: string,
-  actorId: string,
+  actor: AuthUser,
   projectId: string | null = null,
 ): Promise<AssignmentView> {
+  const student = await loadStudent(studentId);
+  assertCoordinatorStudentScope(actor, student);
+  await assertCoordinatorSupervisorScope(actor, supervisorId);
+
   // The conflict test is per STUDENT — not per project, not per supervisor.
   const active = await findActiveAssignmentForStudent(studentId);
   if (active) {
     throw new ConflictError(ACTIVE_EXISTS);
   }
 
-  const supervisor = await validateTargetSupervisor(supervisorId);
+  const supervisor = await validateTargetSupervisor(supervisorId, actor);
 
   try {
     const created = await db.transaction(async (tx) => {
@@ -257,7 +292,7 @@ export async function assignToStudent(
           projectId,
           supervisorId,
           isPrimary: true, // the single active assignment IS the primary
-          assignedBy: actorId,
+          assignedBy: actor.id,
         },
         tx,
       );
@@ -300,11 +335,11 @@ export async function assignToStudent(
 export async function assignToStudentFromStudentParam(
   studentId: string,
   supervisorId: string,
-  actorId: string,
+  actor: AuthUser,
 ): Promise<AssignmentView> {
   await loadStudent(studentId);
   const projectId = await resolveProjectForStudent(studentId);
-  return assignToStudent(studentId, supervisorId, actorId, projectId);
+  return assignToStudent(studentId, supervisorId, actor, projectId);
 }
 
 /**
@@ -315,18 +350,22 @@ export async function assignToStudentFromStudentParam(
 export async function changeSupervisor(
   projectId: string,
   supervisorId: string,
-  actorId: string,
+  actor: AuthUser,
 ): Promise<AssignmentView> {
   const project = await loadActiveProject(projectId);
-  return changeSupervisorForStudent(project.studentId, supervisorId, actorId, projectId);
+  return changeSupervisorForStudent(project.studentId, supervisorId, actor, projectId);
 }
 
 export async function changeSupervisorForStudent(
   studentId: string,
   supervisorId: string,
-  actorId: string,
+  actor: AuthUser,
   projectId: string | null = null,
 ): Promise<AssignmentView> {
+  const student = await loadStudent(studentId);
+  assertCoordinatorStudentScope(actor, student);
+  await assertCoordinatorSupervisorScope(actor, supervisorId);
+
   const active = await findActiveAssignmentForStudent(studentId);
   if (!active) {
     throw new ConflictError(NO_ACTIVE_TO_CHANGE);
@@ -335,7 +374,7 @@ export async function changeSupervisorForStudent(
     throw new ConflictError(ALREADY_SUPERVISING);
   }
 
-  const supervisor = await validateTargetSupervisor(supervisorId);
+  const supervisor = await validateTargetSupervisor(supervisorId, actor);
 
   let created: SupervisorAssignmentRow | undefined;
   try {
@@ -352,7 +391,7 @@ export async function changeSupervisorForStudent(
           projectId: projectId ?? active.projectId,
           supervisorId,
           isPrimary: true,
-          assignedBy: actorId,
+          assignedBy: actor.id,
         },
         tx,
       );
@@ -401,20 +440,26 @@ export async function changeSupervisorForStudent(
 export async function changeSupervisorFromStudentParam(
   studentId: string,
   supervisorId: string,
-  actorId: string,
+  actor: AuthUser,
 ): Promise<AssignmentView> {
   await loadStudent(studentId);
   const projectId = await resolveProjectForStudent(studentId);
-  return changeSupervisorForStudent(studentId, supervisorId, actorId, projectId);
+  return changeSupervisorForStudent(studentId, supervisorId, actor, projectId);
 }
 
 /** DELETE — end the relationship (soft: endedAt set, the row becomes history). */
-export async function end(projectId: string): Promise<AssignmentView> {
+export async function end(projectId: string, actor: AuthUser): Promise<AssignmentView> {
   const project = await loadProject(projectId); // 404 if missing; status is irrelevant here
-  return endForStudent(project.studentId);
+  return endForStudent(project.studentId, actor);
 }
 
-export async function endForStudent(studentId: string): Promise<AssignmentView> {
+export async function endForStudent(
+  studentId: string,
+  actor: AuthUser,
+): Promise<AssignmentView> {
+  const student = await loadStudent(studentId);
+  assertCoordinatorStudentScope(actor, student);
+
   const active = await findActiveAssignmentDetailForStudent(studentId);
   if (!active) {
     throw new ConflictError(NO_ACTIVE_TO_END);
@@ -427,8 +472,11 @@ export async function endForStudent(studentId: string): Promise<AssignmentView> 
   return toView(ended, active.supervisor);
 }
 
-/** DELETE /students/:studentId/supervisor — admin; 404 if there is no such student. */
-export async function endFromStudentParam(studentId: string): Promise<AssignmentView> {
+/** DELETE /students/:studentId/supervisor — admin/coordinator; 404 if no such student. */
+export async function endFromStudentParam(
+  studentId: string,
+  actor: AuthUser,
+): Promise<AssignmentView> {
   await loadStudent(studentId);
-  return endForStudent(studentId);
+  return endForStudent(studentId, actor);
 }

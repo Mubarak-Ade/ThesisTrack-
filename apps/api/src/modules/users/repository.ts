@@ -97,6 +97,11 @@ export async function listUsers(filters: ListUsersFilters): Promise<ListUsersPag
   if (filters.role) {
     conditions.push(eq(users.role, filters.role));
   }
+  if (filters.allowedRoles) {
+    // A bounded role set can never widen access: combined with `role`, an
+    // out-of-set value simply matches nothing (an empty page, not a leak).
+    conditions.push(inArray(users.role, filters.allowedRoles));
+  }
   if (filters.isActive !== undefined) {
     conditions.push(eq(users.isActive, filters.isActive));
   }

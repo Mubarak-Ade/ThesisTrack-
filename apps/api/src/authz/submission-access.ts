@@ -54,7 +54,7 @@ export interface SubmissionGuardOptions {
  */
 export function requireSubmissionAccess(options: SubmissionGuardOptions = {}): RequestHandler {
   const param = options.param ?? 'submissionId';
-  const allow = options.allow ?? ['owner', 'supervisor', 'admin'];
+  const allow = options.allow ?? ['owner', 'supervisor', 'coordinator', 'admin'];
 
   return asyncHandler(async (req, _res, next) => {
     const user = requireUser(req);
@@ -77,6 +77,9 @@ export function requireSubmissionAccess(options: SubmissionGuardOptions = {}): R
 
     const access = await getProjectAccess(user, project);
     if (access === null || !allow.includes(access)) {
+      if (user.role === 'coordinator' && access === null) {
+        throw new NotFoundError('Submission');
+      }
       throw new AuthorizationError('You do not have access to this submission');
     }
 
@@ -102,7 +105,7 @@ export function requireSubmissionVersionAccess(
   options: SubmissionVersionGuardOptions = {},
 ): RequestHandler {
   const param = options.param ?? 'versionId';
-  const allow = options.allow ?? ['owner', 'supervisor', 'admin'];
+  const allow = options.allow ?? ['owner', 'supervisor', 'coordinator', 'admin'];
 
   return asyncHandler(async (req, _res, next) => {
     const user = requireUser(req);
@@ -124,6 +127,9 @@ export function requireSubmissionVersionAccess(
 
     const access = await getProjectAccess(user, project);
     if (access === null || !allow.includes(access)) {
+      if (user.role === 'coordinator' && access === null) {
+        throw new NotFoundError('Submission version');
+      }
       throw new AuthorizationError('You do not have access to this submission');
     }
 

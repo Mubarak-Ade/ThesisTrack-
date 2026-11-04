@@ -71,6 +71,12 @@ export async function listProposals(
   if (filters.studentId) {
     conditions.push(eq(proposals.studentId, filters.studentId));
   }
+  if (filters.departmentId) {
+    // Coordinator scope (ADR-17) — the proposal's student owns the department.
+    conditions.push(
+      sql`exists (select 1 from users u where u.id = ${proposals.studentId} and u.department_id = ${filters.departmentId})`,
+    );
+  }
   if (filters.status) {
     conditions.push(eq(proposals.status, filters.status));
   }

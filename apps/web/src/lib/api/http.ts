@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth';
 
 // ── API payload types (spec §3 / §5 / §6) ─────────────────────────────
 
-export type Role = 'student' | 'supervisor' | 'administrator';
+export type Role = 'student' | 'supervisor' | 'administrator' | 'coordinator';
 
 export interface PublicUser {
   id: string;

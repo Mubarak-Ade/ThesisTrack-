@@ -5,6 +5,7 @@ import { asyncHandler } from '../lib/async-handler.js';
 import { isValidUuid } from '../lib/uuid.js';
 import { getProposalAttachment, getProposalById } from '../modules/proposals/service.js';
 import { getActiveAssignmentForStudent } from '../modules/supervisor-assignments/service.js';
+import { findUserById } from '../modules/users/service.js';
 import type { ProposalAttachmentRow, ProposalRow } from '../modules/proposals/types.js';
 import { requireUser } from './guards.js';
 
@@ -22,12 +23,13 @@ declare global {
 /**
  * Access level a user holds over a single proposal (spec §13.3).
  *
- * - `'owner'`      — the proposal's own student
- * - `'supervisor'` — that student's ACTIVE supervisor
- * - `'admin'`      — administrator
- * - `null`         — no relationship
+ * - `'owner'`       — the proposal's own student
+ * - `'supervisor'`  — that student's ACTIVE supervisor
+ * - `'coordinator'` — the student is in the coordinator's department
+ * - `'admin'`       — administrator
+ * - `null`          — no relationship
  */
-export type ProposalAccess = 'owner' | 'supervisor' | 'admin';
+export type ProposalAccess = 'owner' | 'supervisor' | 'coordinator' | 'admin';
 
 /**
  * **The rule this build exists to enforce:** every proposal-scoped
@@ -55,6 +57,14 @@ export async function resolveProposalAccess(
   const assignment = await getActiveAssignmentForStudent(proposal.studentId, user.id);
   if (assignment) {
     return 'supervisor';
+  }
+
+  if (user.role === 'coordinator') {
+    if (!user.departmentId) return null; // fail closed: no resolved scope
+    const student = await findUserById(proposal.studentId);
+    return student?.departmentId && student.departmentId === user.departmentId
+      ? 'coordinator'
+      : null;
   }
 
   if (user.role === 'administrator') {
@@ -96,7 +106,7 @@ async function loadProposal(req: Request, param: string): Promise<ProposalRow> {
  */
 export function requireProposalAccess(options: ProposalGuardOptions = {}): RequestHandler {
   const param = options.param ?? 'proposalId';
-  const allow = options.allow ?? ['owner', 'supervisor', 'admin'];
+  const allow = options.allow ?? ['owner', 'supervisor', 'coordinator', 'admin'];
 
   return asyncHandler(async (req, _res, next) => {
     const user = requireUser(req);
@@ -104,6 +114,10 @@ export function requireProposalAccess(options: ProposalGuardOptions = {}): Reque
 
     const access = await resolveProposalAccess(proposal, user);
     if (access === null || !allow.includes(access)) {
+      // Existence is not disclosed to an out-of-scope coordinator (§13.5).
+      if (user.role === 'coordinator' && access === null) {
+        throw new NotFoundError('Proposal');
+      }
       throw new AuthorizationError('You do not have access to this proposal');
     }
 
@@ -128,7 +142,7 @@ export interface AttachmentGuardOptions {
  */
 export function requireAttachmentAccess(options: AttachmentGuardOptions = {}): RequestHandler {
   const param = options.param ?? 'attachmentId';
-  const allow = options.allow ?? ['owner', 'supervisor', 'admin'];
+  const allow = options.allow ?? ['owner', 'supervisor', 'coordinator', 'admin'];
 
   return asyncHandler(async (req, _res, next) => {
     const user = requireUser(req);
@@ -145,6 +159,9 @@ export function requireAttachmentAccess(options: AttachmentGuardOptions = {}): R
 
     const access = await resolveProposalAccess(bundle.proposal, user);
     if (access === null || !allow.includes(access)) {
+      if (user.role === 'coordinator' && access === null) {
+        throw new NotFoundError('Proposal attachment');
+      }
       throw new AuthorizationError('You do not have access to this proposal attachment');
     }
 

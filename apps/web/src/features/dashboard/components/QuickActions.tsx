@@ -18,6 +18,12 @@ export default function QuickActions({
 }) {
   const name = useAuthStore((s) => s.user);
   const sessionLabel = name ? `${name.firstName} ${name.lastName}` : 'Signed in';
+  const scopeLabel =
+    name?.role === 'coordinator'
+      ? (name.department?.name ?? 'Your department')
+      : name?.role === 'administrator'
+        ? 'All departments'
+        : (name?.department?.name ?? 'Institution');
 
   return (
     <Card className="h-full">
@@ -67,9 +73,9 @@ export default function QuickActions({
           })}
         </div>
 
-        {/* Inner session strip (spec §5.1) — real name, static dept + version. */}
+        {/* Inner session strip (spec §5.1) — real name, role-scoped department. */}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface-alt/60 px-3 py-2 text-xs text-muted-foreground">
-          <span>Session: {sessionLabel} (Informatics)</span>
+          <span>Session: {sessionLabel} ({scopeLabel})</span>
           <span className="font-medium">v1.2.4-stable</span>
         </div>
       </CardContent>

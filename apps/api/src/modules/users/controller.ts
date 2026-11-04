@@ -22,7 +22,8 @@ import type {
 //   admin creates user → INVITED → invitation → user activates → ACTIVE
 export const create = asyncHandler(async (req, res) => {
     const { user, activationToken, activationExpiresAt, reinvited } = await provisionUser(
-        req.body as CreateUserInput
+        req.body as CreateUserInput,
+        req.user!,
     );
 
     const publicUser = toPublicUser(user);
@@ -53,7 +54,7 @@ export const create = asyncHandler(async (req, res) => {
 // GET /users — admin directory: search (q), filters (role, isActive), paging.
 export const list = asyncHandler(async (req, res) => {
     const query = req.query as unknown as ListUsersQuery;
-    const { users, total } = await listUsers(query);
+    const { users, total } = await listUsers(query, req.user!);
 
     respond(res, 200, {
         users,
@@ -64,21 +65,21 @@ export const list = asyncHandler(async (req, res) => {
 // GET /users/:userId — single account (public shape, never passwordHash).
 export const detail = asyncHandler(async (req, res) => {
     const { userId } = req.params as UserIdParams;
-    const user = await getUser(userId);
+    const user = await getUser(userId, req.user!);
     respond(res, 200, { user: toPublicUser(user) });
 });
 
 // PATCH /users/:userId — profile edits, role changes, activate/deactivate.
 export const update = asyncHandler(async (req, res) => {
     const { userId } = req.params as UserIdParams;
-    const updated = await updateUser(userId, req.body as UpdateUserInput, req.user!.id);
+    const updated = await updateUser(userId, req.body as UpdateUserInput, req.user!);
     respond(res, 200, { user: toPublicUser(updated) });
 });
 
 // POST /users/:userId/invite — resend the invitation (fresh token, latest wins).
 export const invite = asyncHandler(async (req, res) => {
     const { userId } = req.params as UserIdParams;
-    const { user, activationToken, activationExpiresAt } = await resendInvitation(userId);
+    const { user, activationToken, activationExpiresAt } = await resendInvitation(userId, req.user!);
 
     const publicUser = toPublicUser(user);
     if (env.NODE_ENV !== 'production') {
@@ -103,7 +104,7 @@ export const invite = asyncHandler(async (req, res) => {
 // POST /users/import — bulk provisioning; all-or-nothing (422 lists every
 // bad row, a transaction guarantees no partial import).
 export const importUsers = asyncHandler(async (req, res) => {
-    const { users, invitations } = await importUsersRows(req.body as ImportUsersInput);
+    const { users, invitations } = await importUsersRows(req.body as ImportUsersInput, req.user!);
 
     for (const invitation of invitations) {
         if (env.NODE_ENV !== 'production') {

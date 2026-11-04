@@ -27,7 +27,7 @@ export const STUDENTS_FIXTURES: StudentSnapshot = {
   rows: [
     {
       name: 'Marcus Holloway',
-      code: 'STU-2024-001',
+      registrationNumber: 'CST/23/INF/00001',
       email: 'm.holloway@university.edu',
       program: 'Informatics',
       status: 'Active',
@@ -37,7 +37,7 @@ export const STUDENTS_FIXTURES: StudentSnapshot = {
     },
     {
       name: 'Sarah Jenkins',
-      code: 'STU-2024-042',
+      registrationNumber: 'CST/24/ARC/00042',
       email: 's.jenkins@university.edu',
       program: 'Architecture',
       status: 'Active',
@@ -47,7 +47,7 @@ export const STUDENTS_FIXTURES: StudentSnapshot = {
     },
     {
       name: "Liam O'Connor",
-      code: 'STU-2023-142',
+      registrationNumber: 'CST/23/INF/00142',
       email: "l.oconnor@university.edu",
       program: 'Informatics',
       status: 'Active',
@@ -57,7 +57,7 @@ export const STUDENTS_FIXTURES: StudentSnapshot = {
     },
     {
       name: 'Anita Desai',
-      code: 'STU-2024-012',
+      registrationNumber: 'CST/22/CYB/00012',
       email: 'a.desai@university.edu',
       program: 'Cyber Security',
       status: 'Active',
@@ -67,7 +67,7 @@ export const STUDENTS_FIXTURES: StudentSnapshot = {
     },
     {
       name: 'Robert Chen',
-      code: 'STU-2023-098',
+      registrationNumber: 'CST/23/INF/00098',
       email: 'r.chen@university.edu',
       program: 'Informatics',
       status: 'Active',
@@ -77,7 +77,7 @@ export const STUDENTS_FIXTURES: StudentSnapshot = {
     },
     {
       name: 'Yuki Tanaka',
-      code: 'STU-2022-077',
+      registrationNumber: 'CST/22/INF/00077',
       email: 'y.tanaka@university.edu',
       program: 'Informatics',
       status: 'Active',
@@ -87,7 +87,7 @@ export const STUDENTS_FIXTURES: StudentSnapshot = {
     },
     {
       name: 'Priya Nair',
-      code: 'STU-2024-131',
+      registrationNumber: 'CST/24/CYB/00131',
       email: 'p.nair@university.edu',
       program: 'Cyber Security',
       status: 'Active',
@@ -97,7 +97,7 @@ export const STUDENTS_FIXTURES: StudentSnapshot = {
     },
     {
       name: 'Daniel Okafor',
-      code: 'STU-2023-055',
+      registrationNumber: 'CST/23/ARC/00055',
       email: 'd.okafor@university.edu',
       program: 'Architecture',
       status: 'Active',
@@ -107,7 +107,7 @@ export const STUDENTS_FIXTURES: StudentSnapshot = {
     },
     {
       name: 'Fatima Al-Rashid',
-      code: 'STU-2024-088',
+      registrationNumber: 'CST/24/INF/00088',
       email: 'f.alrashid@university.edu',
       program: 'Informatics',
       status: 'Active',
@@ -117,7 +117,7 @@ export const STUDENTS_FIXTURES: StudentSnapshot = {
     },
     {
       name: 'Lucas Meyer',
-      code: 'STU-2022-019',
+      registrationNumber: 'CST/22/CYB/00019',
       email: 'l.meyer@university.edu',
       program: 'Cyber Security',
       status: 'Active',
@@ -127,7 +127,7 @@ export const STUDENTS_FIXTURES: StudentSnapshot = {
     },
     {
       name: 'Amina Yusuf',
-      code: 'STU-2024-204',
+      registrationNumber: 'CST/24/ARC/00204',
       email: 'a.yusuf@university.edu',
       program: 'Architecture',
       status: 'Active',
@@ -137,7 +137,7 @@ export const STUDENTS_FIXTURES: StudentSnapshot = {
     },
     {
       name: 'Henrik Larsen',
-      code: 'STU-2023-167',
+      registrationNumber: 'CST/23/INF/00167',
       email: 'h.larsen@university.edu',
       program: 'Informatics',
       status: 'Active',

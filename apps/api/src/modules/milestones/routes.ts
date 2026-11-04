@@ -1,6 +1,11 @@
 import { Router } from 'express';
 
-import { requireMilestoneAccess, requireProjectAccess, requireRole } from '../../authz/index.js';
+import {
+  requireDepartmentScope,
+  requireMilestoneAccess,
+  requireProjectAccess,
+  requireRole,
+} from '../../authz/index.js';
 import { validate } from '../../middleware/validate.js';
 import * as controller from './controller.js';
 import {
@@ -17,6 +22,8 @@ import {
 } from './schema.js';
 
 const router = Router();
+
+router.use(requireDepartmentScope());
 
 /**
  * §9.4 guard order:
@@ -96,6 +103,8 @@ router.delete(
 // §11.4's per-role target matrix (422 outside a role's permitted targets).
 router.post(
   '/milestones/:milestoneId/status',
+  // Coordinator access is read-only oversight (ADR-17).
+  requireRole('student', 'supervisor', 'administrator'),
   validate(milestoneParamsSchema, 'params'),
   validate(changeMilestoneStatusSchema),
   requireMilestoneAccess(),

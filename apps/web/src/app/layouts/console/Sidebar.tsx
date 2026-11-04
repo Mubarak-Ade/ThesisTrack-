@@ -10,7 +10,8 @@ import { useAuthStore } from '@/stores/auth';
 import type { NavItem } from './nav';
 
 const ROLE_TITLES: Record<string, string> = {
-  administrator: 'Administrator',
+  administrator: 'Super Admin',
+  coordinator: 'Coordinator',
   supervisor: 'Supervisor',
   student: 'Student',
 };

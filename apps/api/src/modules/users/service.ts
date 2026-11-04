@@ -8,6 +8,7 @@ import {
 } from '../../errors/index.js';
 import { db } from '../../config/db.js';
 import { dispatchInvitationEmail } from '../../lib/mailer.js';
+import type { AuthUser } from '../../middleware/auth.js';
 import { issueActivationToken, revokeAllSessions } from '../auth/service.js';
 import {
   countOtherActiveAdministrators,
@@ -36,6 +37,7 @@ import type {
   DepartmentRef,
   ImportResult,
   InvitedAccount,
+  ListUsersFilters,
   ProvisionInput,
   ProvisionedAccount,
   PublicUser,
@@ -134,6 +136,47 @@ async function assertRegistrationNumberFree(
   }
 }
 
+/* ----------------------------------------------------- department scope */
+
+/**
+ * The coordinator's resolved department (design 2026-11-02, ADR-17).
+ * `requireDepartmentScope()` normally attaches it; failing closed here keeps a
+ * service reached without the guard from behaving like an administrator.
+ */
+function coordinatorDepartment(actor: AuthUser): string {
+  if (!actor.departmentId) {
+    throw new AuthorizationError('Coordinator account has no department');
+  }
+  return actor.departmentId;
+}
+
+/**
+ * A coordinator may manage only students and supervisors in its own
+ * department. Every other target (own account, another coordinator, an
+ * administrator, another department) is answered as a missing resource so
+ * existence is never disclosed.
+ */
+function assertCoordinatorTarget(
+  actor: AuthUser,
+  target: { id: string; role: string; departmentId: string | null },
+): void {
+  const scope = coordinatorDepartment(actor);
+  if (
+    target.id === actor.id ||
+    (target.role !== 'student' && target.role !== 'supervisor') ||
+    target.departmentId !== scope
+  ) {
+    throw new NotFoundError('User');
+  }
+}
+
+/** Role values a coordinator may assign when provisioning or editing. */
+function assertCoordinatorRole(role: string | undefined): void {
+  if (role !== undefined && role !== 'student' && role !== 'supervisor') {
+    throw new AuthorizationError('Coordinators can only manage students and supervisors');
+  }
+}
+
 export function findUserByEmail(email: string): Promise<UserWithDepartment | undefined> {
   return findUserByEmailRow(email);
 }
@@ -164,11 +207,36 @@ export async function updateUserPassword(
  * An existing-but-inactive account is re-invited (fresh token); an active
  * account with the same email is a conflict.
  */
-export async function provisionUser(input: ProvisionInput): Promise<ProvisionedAccount> {
+export async function provisionUser(
+  input: ProvisionInput,
+  actor: AuthUser,
+): Promise<ProvisionedAccount> {
+  const coordinator = actor.role === 'coordinator';
+  let departmentId = input.departmentId ?? null;
+
+  if (coordinator) {
+    const scope = coordinatorDepartment(actor);
+    assertCoordinatorRole(input.role);
+    if (input.departmentId && input.departmentId !== scope) {
+      throw new AuthorizationError('You can only create users in your department');
+    }
+    // Omitting the department is normal for a coordinator: it is forced.
+    departmentId = scope;
+  } else if (input.role === 'coordinator' && !departmentId) {
+    throw new ValidationError('Invalid department', [
+      { path: 'departmentId', message: 'A coordinator requires a department' },
+    ]);
+  }
+
   const existing = await findUserByEmailRow(input.email);
 
-  if (existing?.isActive) {
-    throw new ConflictError('An account with this email already exists');
+  if (existing) {
+    if (coordinator) {
+      assertCoordinatorTarget(actor, existing);
+    }
+    if (existing.isActive) {
+      throw new ConflictError('An account with this email already exists');
+    }
   }
 
   let user: UserWithDepartment;
@@ -182,8 +250,12 @@ export async function provisionUser(input: ProvisionInput): Promise<ProvisionedA
     user = existing;
   } else {
     let department: DepartmentRef | null = null;
-    if (input.departmentId) {
-      department = await resolveDepartment(input.departmentId);
+    if (departmentId) {
+      // A coordinator's own archived department stays usable (§5.2).
+      department = await resolveDepartment(
+        departmentId,
+        coordinator ? actor.departmentId : null,
+      );
     }
     if (input.registrationNumber) {
       await assertRegistrationNumberFree(input.registrationNumber, null);
@@ -198,7 +270,7 @@ export async function provisionUser(input: ProvisionInput): Promise<ProvisionedA
       email: input.email.toLowerCase(),
       role: input.role,
       registrationNumber: input.registrationNumber ?? null,
-      departmentId: input.departmentId ?? null,
+      departmentId,
       passwordHash: null, // set during activation
       isActive: false, // INVITED
     });
@@ -215,11 +287,17 @@ export async function provisionUser(input: ProvisionInput): Promise<ProvisionedA
   return { user, activationToken: token, activationExpiresAt: expiresAt, reinvited };
 }
 
-/** Single user lookup (admin detail view). */
-export async function getUser(userId: string): Promise<UserWithDepartment> {
+/** Single user lookup (admin detail view / scoped coordinator view). */
+export async function getUser(
+  userId: string,
+  actor: AuthUser,
+): Promise<UserWithDepartment> {
   const user = await findUserByIdRow(userId);
   if (!user) {
     throw new NotFoundError('User');
+  }
+  if (actor.role === 'coordinator') {
+    assertCoordinatorTarget(actor, user);
   }
   return user;
 }
@@ -227,8 +305,9 @@ export async function getUser(userId: string): Promise<UserWithDepartment> {
 /** GET /users — search + filter + paginate, newest accounts first. */
 export async function listUsers(
   query: ListUsersQuery,
+  actor: AuthUser,
 ): Promise<{ users: PublicUser[]; total: number }> {
-  const { rows, total } = await listUsersRows({
+  const filters: ListUsersFilters = {
     q: query.q,
     role: query.role,
     isActive: query.isActive,
@@ -236,7 +315,20 @@ export async function listUsers(
     missingRegistrationNumber: query.missingRegistrationNumber,
     page: query.page,
     limit: query.limit,
-  });
+  };
+
+  if (actor.role === 'coordinator') {
+    const scope = coordinatorDepartment(actor);
+    if (query.departmentId && query.departmentId !== scope) {
+      throw new AuthorizationError('You can only list users in your department');
+    }
+    // Department and role are both bounded, so `?role=administrator` returns
+    // an empty page rather than another department's account.
+    filters.departmentId = scope;
+    filters.allowedRoles = ['student', 'supervisor'];
+  }
+
+  const { rows, total } = await listUsersRows(filters);
   return { users: rows.map(toPublicUser), total };
 }
 
@@ -256,11 +348,21 @@ export async function listUsers(
 export async function updateUser(
   userId: string,
   input: UpdateUserInput,
-  actorId: string,
+  actor: AuthUser,
 ): Promise<UserWithDepartment> {
   const target = await findUserByIdRow(userId);
   if (!target) {
     throw new NotFoundError('User');
+  }
+
+  const coordinator = actor.role === 'coordinator';
+  if (coordinator) {
+    assertCoordinatorTarget(actor, target);
+    assertCoordinatorRole(input.role);
+    const scope = coordinatorDepartment(actor);
+    if (input.departmentId !== undefined && input.departmentId !== scope) {
+      throw new AuthorizationError('You can only manage users in your department');
+    }
   }
 
   const deactivating = input.isActive === false;
@@ -269,7 +371,7 @@ export async function updateUser(
     input.role !== undefined &&
     input.role !== 'administrator';
 
-  if (deactivating && target.id === actorId) {
+  if (deactivating && target.id === actor.id) {
     throw new AuthorizationError('You cannot deactivate your own account');
   }
 
@@ -291,6 +393,18 @@ export async function updateUser(
     input.role !== undefined ||
     input.registrationNumber !== undefined ||
     input.departmentId !== undefined;
+
+  // The coordinator invariant also applies to a role change: promoting an
+  // unaffiliated account must supply a department (ADR-17 §5.2).
+  if (nextRole === 'coordinator') {
+    const nextDepartmentId =
+      input.departmentId !== undefined ? input.departmentId : target.departmentId;
+    if (!nextDepartmentId) {
+      throw new ValidationError('Invalid department', [
+        { path: 'departmentId', message: 'A coordinator requires a department' },
+      ]);
+    }
+  }
 
   if (nextRole === 'student' && touchesStudentIdentity) {
     if (!nextRegistration) {
@@ -367,10 +481,19 @@ export async function updateUser(
  * account. The fresh token supersedes any outstanding one (latest wins).
  * Active accounts are a conflict: they can simply sign in.
  */
-export async function resendInvitation(userId: string): Promise<InvitedAccount> {
+export async function resendInvitation(
+  userId: string,
+  actor?: AuthUser,
+): Promise<InvitedAccount> {
   const user = await findUserByIdRow(userId);
   if (!user) {
     throw new NotFoundError('User');
+  }
+  // The admin/coordinator route always supplies the actor. The public
+  // "resend my invitation" flow omits it: the account can only re-invite
+  // itself by email, so there is no cross-account scope to enforce.
+  if (actor?.role === 'coordinator') {
+    assertCoordinatorTarget(actor, user);
   }
   if (user.isActive) {
     throw new ConflictError('Account is already active');
@@ -396,12 +519,46 @@ export async function resendInvitation(userId: string): Promise<InvitedAccount> 
  *
  * Row *shape* errors are rejected earlier by the schema layer (400).
  */
-export async function importUsers(input: ImportUsersInput): Promise<ImportResult> {
+export async function importUsers(
+  input: ImportUsersInput,
+  actor: AuthUser,
+): Promise<ImportResult> {
   const details: ErrorDetail[] = [];
   const seenEmails = new Set<string>();
   const seenNumbers = new Set<string>();
 
-  input.users.forEach((user, index) => {
+  const coordinator = actor.role === 'coordinator';
+  const scope = coordinator ? coordinatorDepartment(actor) : null;
+
+  // Per-row scope (ADR-17): a coordinator may import only students/supervisors
+  // into its own department; an omitted department is forced.
+  const rows = input.users.map((user, index) => {
+    if (coordinator) {
+      if (user.role !== 'student' && user.role !== 'supervisor') {
+        details.push({
+          path: `users.${index}.role`,
+          message: 'Coordinators can only import students and supervisors',
+        });
+      }
+      if (user.departmentId && user.departmentId !== scope) {
+        details.push({
+          path: `users.${index}.departmentId`,
+          message: 'You can only import users into your department',
+        });
+      }
+      return { ...user, departmentId: scope! };
+    }
+
+    if (user.role === 'coordinator' && !user.departmentId) {
+      details.push({
+        path: `users.${index}.departmentId`,
+        message: 'A coordinator requires a department',
+      });
+    }
+    return user;
+  });
+
+  rows.forEach((user, index) => {
     if (seenEmails.has(user.email)) {
       details.push({ path: `users.${index}.email`, message: 'Duplicate email in this batch' });
     }
@@ -419,7 +576,7 @@ export async function importUsers(input: ImportUsersInput): Promise<ImportResult
   });
 
   const existingEmails = await findExistingEmails([...seenEmails]);
-  input.users.forEach((user, index) => {
+  rows.forEach((user, index) => {
     if (existingEmails.has(user.email)) {
       details.push({
         path: `users.${index}.email`,
@@ -430,7 +587,7 @@ export async function importUsers(input: ImportUsersInput): Promise<ImportResult
 
   if (seenNumbers.size > 0) {
     const taken = await findExistingRegistrationNumbers([...seenNumbers]);
-    input.users.forEach((user, index) => {
+    rows.forEach((user, index) => {
       if (user.registrationNumber && taken.has(user.registrationNumber.toLowerCase())) {
         details.push({
           path: `users.${index}.registrationNumber`,
@@ -441,9 +598,10 @@ export async function importUsers(input: ImportUsersInput): Promise<ImportResult
   }
 
   // Departments are resolved by id (the web layer maps the CSV's names), and
-  // must be active — an archived department would strand the new account.
+  // must be active — an archived department would strand the new account. A
+  // coordinator's own archived department stays usable (§5.2).
   const departmentIds = [
-    ...new Set(input.users.flatMap((user) => (user.departmentId ? [user.departmentId] : []))),
+    ...new Set(rows.flatMap((user) => (user.departmentId ? [user.departmentId] : []))),
   ];
   const [activeDepartmentIds, departmentRefs] = await Promise.all([
     listActiveDepartmentIds(departmentIds),
@@ -451,10 +609,11 @@ export async function importUsers(input: ImportUsersInput): Promise<ImportResult
   ]);
   const refById = new Map(departmentRefs.map((ref) => [ref.id, ref]));
 
-  input.users.forEach((user, index) => {
+  rows.forEach((user, index) => {
     if (!user.departmentId) return;
     const ref = refById.get(user.departmentId);
-    if (!ref || !activeDepartmentIds.has(user.departmentId)) {
+    const ownArchivedDepartment = coordinator && user.departmentId === scope;
+    if (!ref || (!activeDepartmentIds.has(user.departmentId) && !ownArchivedDepartment)) {
       details.push({
         path: `users.${index}.departmentId`,
         message: 'Department not found or archived',
@@ -481,8 +640,8 @@ export async function importUsers(input: ImportUsersInput): Promise<ImportResult
   // would mail links to users a rollback then erases. A failed import mails
   // nobody; the awaited tx resolves only on commit.
   const result = await db.transaction(async (tx) => {
-    const rows = await insertUsers(
-      input.users.map((user) => ({
+    const insertedRows = await insertUsers(
+      rows.map((user) => ({
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
@@ -496,7 +655,7 @@ export async function importUsers(input: ImportUsersInput): Promise<ImportResult
     );
 
     const invitations: ImportResult['invitations'] = [];
-    for (const row of rows) {
+    for (const row of insertedRows) {
       const issued = await issueActivationToken(row.id, tx);
       invitations.push({
         email: row.email,
@@ -505,9 +664,9 @@ export async function importUsers(input: ImportUsersInput): Promise<ImportResult
       });
     }
 
-    // `rows` is index-aligned with the request (both built in the same order),
-    // so the department resolved above attaches without a second read.
-    const users = rows.map((row) => ({
+    // `insertedRows` is index-aligned with the request (both built in the same
+    // order), so the department resolved above attaches without a second read.
+    const users = insertedRows.map((row) => ({
       ...row,
       department: row.departmentId ? (refById.get(row.departmentId) ?? null) : null,
     }));

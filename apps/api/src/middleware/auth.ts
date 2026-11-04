@@ -8,6 +8,12 @@ export interface AuthUser {
   id: string;
   email: string;
   role: Role;
+  /**
+   * Resolved per request by `requireDepartmentScope()` for coordinators.
+   * Deliberately NOT a JWT claim: a transfer must take effect immediately,
+   * not when the access token refreshes.
+   */
+  departmentId?: string;
 }
 
 declare global {

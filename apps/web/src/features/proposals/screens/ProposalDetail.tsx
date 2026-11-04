@@ -111,7 +111,13 @@ export default function ProposalDetail() {
   const isOwner = user?.id === proposal.studentId;
   const editable = isProposalEditable(proposal.status);
   const canRemove = isOwner && editable;
-  const isReviewer = (user?.role === 'supervisor' || user?.role === 'administrator') && !isOwner;
+  // Design 2026-11-02: a coordinator may start review/decide within its own
+  // department; the API remains authoritative on scope.
+  const isReviewer =
+    (user?.role === 'supervisor' ||
+      user?.role === 'administrator' ||
+      user?.role === 'coordinator') &&
+    !isOwner;
   const canDecide =
     isReviewer && (proposal.status === 'submitted' || proposal.status === 'under_review');
 

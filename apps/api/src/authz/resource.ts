@@ -103,6 +103,10 @@ export function requireProjectAccess(options: ProjectGuardOptions = {}): Request
 
     const access = await getProjectAccess(user, project);
     if (access === null) {
+      // Existence is not disclosed to an out-of-scope coordinator (§13.5).
+      if (user.role === 'coordinator') {
+        throw new NotFoundError('Project');
+      }
       throw new AuthorizationError('You do not have access to this project');
     }
 
@@ -143,6 +147,14 @@ export function requireStudentAccess(options: StudentGuardOptions = {}): Request
 
     if (user.role === 'administrator' || student.id === user.id) {
       return next();
+    }
+
+    if (user.role === 'coordinator') {
+      if (student.departmentId && student.departmentId === user.departmentId) {
+        return next();
+      }
+      // Out of scope = the student resource does not exist for this caller.
+      throw new NotFoundError('Student');
     }
 
     const assignment = await getActiveAssignmentForStudent(student.id, user.id);

@@ -6,7 +6,8 @@ import { useAuthStore } from '@/stores/auth';
 import { useUnreadCount } from './useShellQueries';
 
 const ROLE_LABELS: Record<string, string> = {
-  administrator: 'ADMINISTRATOR',
+  administrator: 'SUPER ADMIN',
+  coordinator: 'COORDINATOR',
   supervisor: 'SUPERVISOR',
   student: 'STUDENT',
 };

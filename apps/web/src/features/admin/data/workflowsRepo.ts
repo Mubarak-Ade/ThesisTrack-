@@ -8,9 +8,11 @@
  * failures on screen instead of hiding them behind sample data.
  */
 import { api } from '@/lib/api/http';
-import { mapPaged, mapWorkflowDetail, mapWorkflowSummary } from './mappers';
+import { mapDuplicateWorkflow, mapPaged, mapWorkflowDetail, mapWorkflowSummary } from './mappers';
 import type {
   CreateWorkflowInput,
+  DuplicateWorkflowInput,
+  DuplicateWorkflowResult,
   PatchWorkflowInput,
   WorkflowDetail,
   WorkflowSummary,
@@ -50,4 +52,18 @@ export async function patchWorkflow(
 /** DELETE — 422 when projects reference it (§8.11 RESTRICT): archive instead. */
 export async function deleteWorkflow(workflowId: string): Promise<void> {
   await api.delete<unknown>(`/workflows/${workflowId}`);
+}
+
+/**
+ * POST /workflows/:id/duplicate — "duplicate as a new version" (design
+ * 2026-11-02, §12.2): archives an active source and creates the next active
+ * definition with its stages copied, in one server transaction.
+ */
+export async function duplicateWorkflow(
+  workflowId: string,
+  input: DuplicateWorkflowInput,
+): Promise<DuplicateWorkflowResult> {
+  return mapDuplicateWorkflow(
+    await api.post<unknown>(`/workflows/${workflowId}/duplicate`, input),
+  );
 }

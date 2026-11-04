@@ -70,6 +70,8 @@ export interface InvitedAccount extends IssuedInvitation {
 export interface ListUsersFilters {
   q?: string;
   role?: Role;
+  /** Bounded role set (coordinators: student + supervisor only). */
+  allowedRoles?: Role[];
   isActive?: boolean;
   /** Managed department filter (design 2026-10-28). */
   departmentId?: string;

@@ -134,10 +134,10 @@ export default function SupervisorList() {
   const exportCsv = () => {
     downloadCsv(
       'thesistrack-faculty-supervisors.csv',
-      ['Name', 'Code', 'Email', 'Program', 'Students', 'Capacity', 'Avg Progress', 'Status', 'Last Activity'],
+      ['Name', 'Registration No.', 'Email', 'Program', 'Students', 'Capacity', 'Avg Progress', 'Status', 'Last Activity'],
       pageRows.map((row) => [
         row.name,
-        row.code,
+        row.registrationNumber ?? '',
         row.email,
         row.program,
         row.workloadStudents ?? '',
@@ -276,7 +276,7 @@ export default function SupervisorList() {
               <tbody>
                 {pageRows.map((row) => (
                   <FacultyRow
-                    key={row.code}
+                    key={row.registrationNumber ?? row.email}
                     row={row}
                     onAction={() => toast.info('Row actions are not available yet')}
                   />
@@ -426,7 +426,7 @@ export default function SupervisorList() {
   );
 }
 
-/** One directory row — silhouette + code + email, program, load, progress, status. */
+/** One directory row — silhouette + registration number + email, program, load, progress, status. */
 function FacultyRow({ row, onAction }: { row: SupervisorRow; onAction: () => void }) {
   return (
     <tr className="border-b border-border last:border-0 hover:bg-accent/40">
@@ -435,7 +435,9 @@ function FacultyRow({ row, onAction }: { row: SupervisorRow; onAction: () => voi
           <Avatar size="sm" />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-foreground">{row.name}</p>
-            <p className="truncate font-mono text-xs text-primary">{row.code}</p>
+            <p className="truncate font-mono text-xs text-primary">
+              {row.registrationNumber ?? '—'}
+            </p>
             <p className="truncate text-xs text-muted-foreground">{row.email}</p>
           </div>
         </div>

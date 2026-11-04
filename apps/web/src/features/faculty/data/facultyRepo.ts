@@ -41,10 +41,9 @@ function str(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
 }
 
-/** Display code (spec §4): `FAC-` + first 4 cleaned id chars, like USR codes. */
-function asCode(id: string): string {
-  const cleaned = id.replace(/-/g, '');
-  return cleaned.length >= 4 ? `FAC-${cleaned.slice(0, 4).toUpperCase()}` : id;
+/** Display field — null when the account has no registration/staff number. */
+function asNullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
 }
 
 /** §8.7 program — no department column exists (ADR-11), so absent → 'Unaffiliated'. */
@@ -55,11 +54,10 @@ function asProgram(value: unknown): string {
 /** User row → live supervisor row. Structure is strict: throws → repo falls back. */
 function mapSupervisor(value: unknown): SupervisorRow {
   const r = asRecord(value);
-  const id = str(r.id);
-  if (!id) throw new Error('GET /users: row missing `id` — response shape changed');
+  if (!str(r.id)) throw new Error('GET /users: row missing `id` — response shape changed');
   return {
     name: `${str(r.firstName)} ${str(r.lastName)}`.trim(),
-    code: asCode(id),
+    registrationNumber: asNullableString(r.registrationNumber),
     email: str(r.email),
     program: asProgram(r.program),
     // §4.5 — no workload/activity endpoints: live rows honestly carry nulls.
@@ -139,7 +137,7 @@ function fallbackSnapshot(args: { page: number; limit: number; q?: string }): Fa
   const q = args.q?.trim().toLowerCase();
   const filtered = FACULTY_FIXTURES.rows.filter((row) => {
     if (!q) return true;
-    return `${row.name} ${row.code} ${row.email} ${row.program}`.toLowerCase().includes(q);
+    return `${row.name} ${row.registrationNumber ?? ''} ${row.email} ${row.program}`.toLowerCase().includes(q);
   });
   const start = (args.page - 1) * args.limit;
   return {

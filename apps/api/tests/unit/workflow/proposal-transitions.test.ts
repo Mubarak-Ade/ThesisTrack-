@@ -104,8 +104,8 @@ describe('proposal action roles (spec §4.5)', () => {
       attach: ['student'],
       detach: ['student'],
       submit: ['student'],
-      'start-review': ['supervisor', 'administrator'],
-      review: ['supervisor', 'administrator'],
+      'start-review': ['supervisor', 'administrator', 'coordinator'],
+      review: ['supervisor', 'administrator', 'coordinator'],
     });
   });
 

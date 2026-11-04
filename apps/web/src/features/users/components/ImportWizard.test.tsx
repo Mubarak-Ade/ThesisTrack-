@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 import type { Department } from '@/features/departments/data/types';
+import type { PublicUser } from '@/lib/api/http';
+import { useAuthStore } from '@/stores/auth';
 import { importUsers } from '../data/usersRepo';
 import ImportWizard from './ImportWizard';
 
@@ -77,6 +79,7 @@ const renderWizard = () =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useAuthStore.setState({ user: null, status: 'anonymous', accessToken: null });
 });
 
 describe('ImportWizard department column (design 2026-10-28)', () => {
@@ -184,6 +187,85 @@ describe('ImportWizard department column (design 2026-10-28)', () => {
 
     expect(
       await screen.findByText(/Use FAC\/YY\/DEPT\/NNNNN, e\.g\. CST\/22\/SWE\/00825/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Continue$/ })).toBeDisabled();
+  });
+});
+
+const COORDINATOR: PublicUser = {
+  id: '00000000-0000-4000-8000-0000000000c1',
+  email: 'cora.coordinator@test.local',
+  firstName: 'Cora',
+  lastName: 'Coordinator',
+  role: 'coordinator',
+  isActive: true,
+  createdAt: '2026-09-01T00:00:00.000Z',
+  department: { id: INF.id, name: INF.name, code: INF.code },
+};
+
+describe('ImportWizard coordinator scope (design 2026-11-02)', () => {
+  beforeEach(() => {
+    useAuthStore.setState({
+      user: COORDINATOR,
+      status: 'authenticated',
+      accessToken: 'token',
+    });
+  });
+
+  it('locks the Department column and rejects a foreign-department row', async () => {
+    renderWizard();
+
+    expect(
+      screen.getByText(/Your import is scoped to Informatics; other departments are row errors/i),
+    ).toBeInTheDocument();
+
+    upload(WITH_DEPARTMENT);
+
+    expect(await screen.findByText(/6 columns detected/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Department')).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /validate 2 rows/i }));
+
+    expect(
+      await screen.findByText(/Department must be Informatics for your scope/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Continue$/ })).toBeDisabled();
+  });
+
+  it('posts the locked department for a row that omits the column', async () => {
+    vi.mocked(importUsers).mockResolvedValue({ created: 1 });
+    renderWizard();
+    upload(WITHOUT_DEPARTMENT);
+
+    fireEvent.click(await screen.findByRole('button', { name: /validate 1 rows/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue$/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Import 1 user' }));
+
+    await waitFor(() => expect(importUsers).toHaveBeenCalledTimes(1));
+    expect(importUsers).toHaveBeenCalledWith([
+      {
+        firstName: 'Anita',
+        lastName: 'Desai',
+        email: 'a.desai@student.edu',
+        role: 'student',
+        registrationNumber: 'CST/22/INF/00002',
+        department: 'Informatics',
+      },
+    ]);
+  });
+
+  it('blocks coordinator and administrator roles in the CSV', async () => {
+    const ELEVATED = [
+      'firstName,lastName,email,role,registrationNumber,department',
+      'Cora,Coordinator,c.coordinator@student.edu,coordinator,,Informatics',
+    ].join('\n');
+    renderWizard();
+    upload(ELEVATED);
+
+    fireEvent.click(await screen.findByRole('button', { name: /validate 1 rows/i }));
+
+    expect(
+      await screen.findByText('Coordinators can only import students and supervisors'),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Continue$/ })).toBeDisabled();
   });

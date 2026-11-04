@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GitBranch, Plus, Star } from 'lucide-react';
+import { Copy, GitBranch, Plus, Star } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import ErrorState from '@/components/feedback/ErrorState';
 import LoadingState from '@/components/feedback/LoadingState';
 import { useDepartments } from '@/features/departments/hooks/useDepartments';
 import { formatRelative } from '@/lib/utils/time';
+import { useAuthStore } from '@/stores/auth';
 import { useWorkflowWrite, useWorkflows } from '../hooks';
 import type { WorkflowSummary } from '../data';
 
@@ -30,6 +31,7 @@ const PAGE_SIZE = 10;
 
 type DialogState =
   | { kind: 'create' }
+  | { kind: 'duplicate'; workflow: WorkflowSummary }
   | { kind: 'setDefault' | 'archive' | 'delete'; workflow: WorkflowSummary }
   | null;
 
@@ -37,10 +39,17 @@ const EMPTY_CREATE = { name: '', departmentId: '', academicSession: '', descript
 
 export default function WorkflowList() {
   const navigate = useNavigate();
+  const session = useAuthStore((s) => s.user);
+  // Design 2026-11-02: a coordinator manages its own department only. The
+  // server enforces scope; the controls below mirror it.
+  const isCoordinator = session?.role === 'coordinator';
+  const lockedDepartment = isCoordinator ? (session?.department ?? null) : null;
   const [page, setPage] = useState(1);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [form, setForm] = useState(EMPTY_CREATE);
+  const [duplicateName, setDuplicateName] = useState('');
+  const [duplicateSession, setDuplicateSession] = useState('');
   const { data: departmentPage, isLoading: departmentsLoading } = useDepartments();
   const departments = departmentPage?.items ?? [];
 
@@ -52,6 +61,18 @@ export default function WorkflowList() {
   const close = () => {
     setDialog(null);
     setForm(EMPTY_CREATE);
+    setDuplicateName('');
+    setDuplicateSession('');
+  };
+
+  const openDuplicate = (workflow: WorkflowSummary) => {
+    setDuplicateName(
+      workflow.academicSession
+        ? `${workflow.name} (${workflow.academicSession})`
+        : `${workflow.name} (new version)`,
+    );
+    setDuplicateSession(workflow.academicSession ?? '');
+    setDialog({ kind: 'duplicate', workflow });
   };
 
   const confirm = () => {
@@ -67,7 +88,9 @@ export default function WorkflowList() {
           action: 'create',
           input: {
             name,
-            departmentId: form.departmentId || null,
+            departmentId: isCoordinator
+              ? (lockedDepartment?.id ?? null)
+              : form.departmentId || null,
             academicSession: form.academicSession.trim() || null,
             description: form.description.trim() || null,
             stages: [],
@@ -79,6 +102,36 @@ export default function WorkflowList() {
             toast.success('Workflow created — add its stages next.');
             close();
             navigate(`/workflows/${detail.workflow.id}`);
+          },
+          onError: (error) => toast.error(error.message),
+        },
+      );
+      return;
+    }
+
+    if (dialog.kind === 'duplicate') {
+      const name = duplicateName.trim();
+      if (!name) {
+        toast.error('Workflow name is required.');
+        return;
+      }
+      write.mutate(
+        {
+          action: 'duplicate',
+          workflowId: dialog.workflow.id,
+          input: {
+            name,
+            academicSession: duplicateSession.trim() || null,
+          },
+        },
+        {
+          onSuccess: (result) => {
+            if (!result || !('workflow' in result)) return; // create/patch/duplicate answer a definition
+            toast.success(
+              `Created "${result.workflow.name}" — the source was archived (ADR-17).`,
+            );
+            close();
+            navigate(`/workflows/${result.workflow.id}`);
           },
           onError: (error) => toast.error(error.message),
         },
@@ -160,22 +213,37 @@ export default function WorkflowList() {
       </span>
       <select
         aria-label="Department"
-        value={form.departmentId}
-        disabled={departmentsLoading}
+        value={isCoordinator ? (lockedDepartment?.id ?? '') : form.departmentId}
+        disabled={departmentsLoading || isCoordinator}
         onChange={(event) =>
           setForm((current) => ({ ...current, departmentId: event.target.value }))
         }
         className="mt-1.5 flex h-11 w-full rounded-md border border-input bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
       >
-        <option value="">
-          {departmentsLoading ? 'Loading departments…' : 'Any (default / fallback)'}
-        </option>
-        {departments.map((department) => (
-          <option key={department.id} value={department.id}>
-            {department.name}
-          </option>
-        ))}
+        {isCoordinator ? (
+          lockedDepartment ? (
+            <option value={lockedDepartment.id}>{lockedDepartment.name}</option>
+          ) : (
+            <option value="">No department assigned</option>
+          )
+        ) : (
+          <>
+            <option value="">
+              {departmentsLoading ? 'Loading departments…' : 'Any (default / fallback)'}
+            </option>
+            {departments.map((department) => (
+              <option key={department.id} value={department.id}>
+                {department.name}
+              </option>
+            ))}
+          </>
+        )}
       </select>
+      {isCoordinator && (
+        <span className="mt-1 block text-xs italic text-muted-foreground">
+          Locked to your department (design 2026-11-02).
+        </span>
+      )}
     </label>
   );
 
@@ -298,7 +366,18 @@ export default function WorkflowList() {
                           <Button asChild variant="outline" size="sm">
                             <Link to={`/workflows/${workflow.id}`}>Stages</Link>
                           </Button>
-                          {!workflow.isDefault && !workflow.archivedAt && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            aria-label={`Duplicate ${workflow.name} as a new version`}
+                            onClick={() => openDuplicate(workflow)}
+                            disabled={write.isPending}
+                          >
+                            <Copy aria-hidden="true" />
+                            Duplicate
+                          </Button>
+                          {!isCoordinator && !workflow.isDefault && !workflow.archivedAt && (
                             <Button
                               type="button"
                               variant="outline"
@@ -311,16 +390,18 @@ export default function WorkflowList() {
                             </Button>
                           )}
                           {workflow.archivedAt ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              aria-label={`Restore ${workflow.name}`}
-                              onClick={() => restore(workflow)}
-                              disabled={write.isPending}
-                            >
-                              Restore
-                            </Button>
+                            !isCoordinator && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                aria-label={`Restore ${workflow.name}`}
+                                onClick={() => restore(workflow)}
+                                disabled={write.isPending}
+                              >
+                                Restore
+                              </Button>
+                            )
                           ) : (
                             <Button
                               type="button"
@@ -333,16 +414,18 @@ export default function WorkflowList() {
                               Archive
                             </Button>
                           )}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            aria-label={`Delete ${workflow.name}`}
-                            onClick={() => setDialog({ kind: 'delete', workflow })}
-                            disabled={write.isPending}
-                          >
-                            Delete
-                          </Button>
+                          {!isCoordinator && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              aria-label={`Delete ${workflow.name}`}
+                              onClick={() => setDialog({ kind: 'delete', workflow })}
+                              disabled={write.isPending}
+                            >
+                              Delete
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -363,7 +446,52 @@ export default function WorkflowList() {
         )}
       </section>
 
-      {dialog?.kind === 'create' ? (
+      {dialog?.kind === 'duplicate' ? (
+        <ConfirmDialog
+          open
+          title="Duplicate as a new version"
+          description={
+            <span className="block space-y-3">
+              <span className="block">
+                <strong>{dialog.workflow.name}</strong> is archived and a new active definition
+                copies every stage, description and gate (design 2026-11-02). Existing project
+                snapshots are untouched (ADR-15).
+              </span>
+              <label className="block">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  New workflow name *
+                </span>
+                <Input
+                  aria-label="New workflow name"
+                  value={duplicateName}
+                  onChange={(event) => setDuplicateName(event.target.value)}
+                  className="mt-1.5"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Academic session
+                </span>
+                <Input
+                  aria-label="Academic session"
+                  value={duplicateSession}
+                  onChange={(event) => setDuplicateSession(event.target.value)}
+                  placeholder="e.g. 2027/2028"
+                  className="mt-1.5"
+                />
+              </label>
+              <span className="block text-xs">
+                The department cannot change. A 409 means another active workflow still holds the
+                slot.
+              </span>
+            </span>
+          }
+          confirmLabel="Duplicate"
+          loading={write.isPending}
+          onConfirm={confirm}
+          onCancel={close}
+        />
+      ) : dialog?.kind === 'create' ? (
         <ConfirmDialog
           open
           title="New workflow"

@@ -26,6 +26,7 @@
  */
 export * from './guards.js';
 export * from './compose.js';
+export * from './scope.js';
 export * from './access.js';
 export * from './proposal-access.js';
 export * from './milestone-access.js';

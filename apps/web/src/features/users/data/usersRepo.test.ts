@@ -176,7 +176,7 @@ describe('getUser', () => {
 
     const detail = await getUser(MARCUS.id);
 
-    expect(detail?.code).toBe('USR-0000'); // live rows derive USR-XXXX from the id (§4)
+    expect(detail?.registrationNumber).toBeNull(); // live row omitted it — never invented
     expect(detail?.railsError).toBe(false);
     expect(detail?.theses).toHaveLength(1);
     expect(detail?.theses[0]).toEqual({
@@ -211,7 +211,7 @@ describe('getUser', () => {
 
     const detail = await getUser(MARCUS.id);
 
-    expect(detail?.code).toBe('USR-0000');
+    expect(detail?.registrationNumber).toBeNull();
     expect(detail?.railsError).toBe(true);
     expect(detail?.theses).toEqual([]);
     expect(console.warn).toHaveBeenCalled();
@@ -220,7 +220,7 @@ describe('getUser', () => {
   it('returns the fixture row for a known id when the API fails', async () => {
     get.mockRejectedValue(new ApiError({ status: 500, code: 'INTERNAL', message: 'boom' }));
     const detail = await getUser(MARCUS.id);
-    expect(detail?.code).toBe('USR-9012');
+    expect(detail?.registrationNumber).toBe(MARCUS.registrationNumber);
     expect(detail?.railsError).toBe(true); // the fan-out failed with it
     expect(console.warn).toHaveBeenCalled();
   });

@@ -10,8 +10,8 @@ export type FacultyStatus = 'MAX LOAD' | 'ACTIVE' | 'ON LEAVE' | 'INACTIVE';
 
 export interface SupervisorRow {
   name: string;
-  /** Display code — fixtures keep mockup FAC-8821; live derives FAC-XXXX from the id. */
-  code: string;
+  /** The supervisor's registration/staff number; `null` when none is recorded. */
+  registrationNumber: string | null;
   email: string;
   /** §8.7 program — replaces the display-only `department` (ADR-11: no departments). */
   program: string;

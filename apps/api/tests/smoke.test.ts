@@ -17,7 +17,7 @@ import { ROLES, type Role } from '../src/lib/roles.js';
  */
 describe('vitest wiring (Phase 0)', () => {
   it('resolves `.js` specifiers back to TypeScript sources', () => {
-    expect(ROLES).toEqual(['student', 'supervisor', 'administrator']);
+    expect(ROLES).toEqual(['student', 'supervisor', 'coordinator', 'administrator']);
   });
 
   it('accepts type-only imports alongside value imports', () => {

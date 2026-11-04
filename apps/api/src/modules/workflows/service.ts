@@ -1,10 +1,19 @@
 import { db } from '../../config/db.js';
-import { BusinessRuleError, ConflictError, NotFoundError, ValidationError } from '../../errors/index.js';
+import {
+  AuthorizationError,
+  BusinessRuleError,
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from '../../errors/index.js';
 import type { projectStages, workflows } from '../../schema/index.js';
+import { departmentScope } from '../../authz/scope.js';
+import type { AuthUser } from '../../middleware/auth.js';
 import type { ProjectRow } from '../projects/types.js';
 import * as repo from './repository.js';
 import type {
   CreateWorkflowInput,
+  DuplicateWorkflowInput,
   ListWorkflowsQuery,
   PatchWorkflowInput,
   StageInput,
@@ -52,9 +61,21 @@ function normalizeText(value: string | null | undefined): string | null {
 
 export async function listWorkflows(
   query: ListWorkflowsQuery,
+  actor: AuthUser,
 ): Promise<{ workflows: WorkflowRow[]; total: number }> {
+  let departmentId = query.departmentId ?? null;
+
+  if (actor.role === 'coordinator') {
+    const scope = departmentScope(actor);
+    if (query.departmentId && query.departmentId !== scope) {
+      throw new AuthorizationError('You can only list your department workflows');
+    }
+    // Forced, so the catch-all/default (department_id NULL) is never listed.
+    departmentId = scope;
+  }
+
   const { rows, total } = await repo.listWorkflows({
-    departmentId: query.departmentId ?? null,
+    departmentId,
     includeArchived: query.includeArchived === 'true',
     page: query.page,
     limit: query.limit,
@@ -62,9 +83,16 @@ export async function listWorkflows(
   return { workflows: rows, total };
 }
 
-export async function getWorkflowDetail(id: string): Promise<WorkflowDetail> {
+export async function getWorkflowDetail(
+  id: string,
+  actor: AuthUser,
+): Promise<WorkflowDetail> {
   const workflow = await repo.findWorkflowById(id);
   if (!workflow) throw new NotFoundError('Workflow');
+  if (actor.role === 'coordinator' && workflow.departmentId !== departmentScope(actor)) {
+    // Covers another department and the default (department_id NULL).
+    throw new NotFoundError('Workflow');
+  }
   return { workflow, stages: await repo.listWorkflowStages(id) };
 }
 
@@ -147,10 +175,21 @@ async function assertDepartmentSlotFree(
 
 /** POST /workflows — admin only (§4.6); one active workflow per department. */
 export async function createWorkflow(
-  actorId: string,
+  actor: AuthUser,
   input: CreateWorkflowInput,
 ): Promise<WorkflowDetail> {
-  const departmentId = input.departmentId ?? null;
+  let departmentId = input.departmentId ?? null;
+
+  if (actor.role === 'coordinator') {
+    const scope = departmentScope(actor);
+    // Omitting the department is normal (forced); `null` would mean the
+    // catch-all/default and another department is out of scope.
+    if (input.departmentId !== undefined && input.departmentId !== scope) {
+      throw new AuthorizationError('You can only manage your department workflow');
+    }
+    departmentId = scope;
+  }
+
   if (departmentId) await assertDepartmentSlotFree(departmentId, null);
 
   const stages = input.stages ?? [];
@@ -164,7 +203,7 @@ export async function createWorkflow(
           academicSession: normalizeText(input.academicSession),
           description: normalizeText(input.description),
           isDefault: false, // the flag belongs to seed-workflows (§8.10), not the API
-          createdBy: actorId,
+          createdBy: actor.id,
         },
         tx,
       );
@@ -200,9 +239,33 @@ export async function createWorkflow(
  *     point at it as provenance (RESTRICT), and rewriting history is exactly
  *     what ADR-15 forbids.
  */
-export async function patchWorkflow(id: string, input: PatchWorkflowInput): Promise<WorkflowDetail> {
+export async function patchWorkflow(
+  id: string,
+  input: PatchWorkflowInput,
+  actor: AuthUser,
+): Promise<WorkflowDetail> {
   const workflow = await repo.findWorkflowById(id);
   if (!workflow) throw new NotFoundError('Workflow');
+
+  if (actor.role === 'coordinator') {
+    if (workflow.departmentId !== departmentScope(actor)) {
+      throw new NotFoundError('Workflow'); // another department or the default
+    }
+    // Archived definitions are read-only to a coordinator: they may archive an
+    // active one but never restore or edit a retired definition (§12.3).
+    if (workflow.archivedAt !== null) {
+      throw new AuthorizationError('Archived workflows are read-only');
+    }
+    if (input.departmentId !== undefined) {
+      throw new AuthorizationError('You cannot change a workflow department');
+    }
+    if (input.isDefault !== undefined) {
+      throw new AuthorizationError('You cannot change the default workflow');
+    }
+    if (input.archived === false) {
+      throw new AuthorizationError('You cannot restore a workflow');
+    }
+  }
 
   const willBeActive = input.archived === undefined ? workflow.archivedAt === null : !input.archived;
   const targetDepartmentId =
@@ -355,6 +418,99 @@ export async function patchWorkflow(id: string, input: PatchWorkflowInput): Prom
     workflow: (await repo.findWorkflowById(id))!,
     stages: stages ?? (await repo.listWorkflowStages(id)),
   };
+}
+
+/**
+ * POST /workflows/:workflowId/duplicate — "duplicate as a new version"
+ * (§12.2). Archives an active source and inserts a fresh active definition
+ * with copied stages in ONE transaction, so the department never loses its
+ * active workflow and a failure leaves no half-version.
+ */
+export interface DuplicateWorkflowResult extends WorkflowDetail {
+  /** The source that was archived by this call; null when it already was. */
+  archivedWorkflowId: string | null;
+}
+
+export async function duplicateWorkflow(
+  sourceId: string,
+  input: DuplicateWorkflowInput,
+  actor: AuthUser,
+): Promise<DuplicateWorkflowResult> {
+  const source = await repo.findWorkflowById(sourceId);
+  if (!source) throw new NotFoundError('Workflow');
+  if (actor.role === 'coordinator' && source.departmentId !== departmentScope(actor)) {
+    throw new NotFoundError('Workflow');
+  }
+  if (!source.departmentId) {
+    // The catch-all/default has no department slot and no owner to archive it.
+    throw new BusinessRuleError('The default workflow cannot be versioned', [
+      { path: 'workflowId', message: 'Create a department workflow instead' },
+    ]);
+  }
+
+  const sourceActive = source.archivedAt === null;
+  // An active source releases its own slot as part of this transaction.
+  await assertDepartmentSlotFree(source.departmentId, sourceActive ? source.id : null);
+
+  const sourceStages = await repo.listWorkflowStages(source.id);
+
+  try {
+    const created = await db.transaction(async (tx) => {
+      if (sourceActive) {
+        const archived = await repo.updateWorkflow(
+          source.id,
+          {
+            archivedAt: new Date(),
+            ...(source.isDefault ? { isDefault: false } : {}),
+          },
+          tx,
+        );
+        if (!archived) throw new NotFoundError('Workflow');
+      }
+
+      const workflow = await repo.insertWorkflow(
+        {
+          name: input.name,
+          departmentId: source.departmentId,
+          academicSession: normalizeText(input.academicSession) ?? source.academicSession,
+          description: source.description,
+          isDefault: false, // a new version never silently steals the fallback
+          createdBy: actor.id,
+        },
+        tx,
+      );
+
+      const stages: WorkflowStageRow[] = [];
+      for (const [index, stage] of sourceStages.entries()) {
+        stages.push(
+          await repo.insertStage(
+            {
+              workflowId: workflow.id,
+              position: index + 1,
+              name: stage.name,
+              description: stage.description,
+              dueOffsetDays: stage.dueOffsetDays,
+              deliverable: stage.deliverable,
+              responsibleRole: stage.responsibleRole,
+              requiresSubmission: stage.requiresSubmission,
+              requiresReview: stage.requiresReview,
+              requiresApproval: stage.requiresApproval,
+            },
+            tx,
+          ),
+        );
+      }
+
+      return { workflow, stages };
+    });
+
+    return { ...created, archivedWorkflowId: sourceActive ? source.id : null };
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      throw new ConflictError('Another active workflow already covers this department');
+    }
+    throw err;
+  }
 }
 
 /**

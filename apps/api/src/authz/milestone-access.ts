@@ -44,7 +44,7 @@ export interface MilestoneGuardOptions {
  */
 export function requireMilestoneAccess(options: MilestoneGuardOptions = {}): RequestHandler {
   const param = options.param ?? 'milestoneId';
-  const allow = options.allow ?? ['owner', 'supervisor', 'admin'];
+  const allow = options.allow ?? ['owner', 'supervisor', 'coordinator', 'admin'];
 
   return asyncHandler(async (req, _res, next) => {
     const user = requireUser(req);
@@ -67,6 +67,9 @@ export function requireMilestoneAccess(options: MilestoneGuardOptions = {}): Req
 
     const access = await getProjectAccess(user, project);
     if (access === null || !allow.includes(access)) {
+      if (user.role === 'coordinator' && access === null) {
+        throw new NotFoundError('Milestone');
+      }
       throw new AuthorizationError('You do not have access to this milestone');
     }
 

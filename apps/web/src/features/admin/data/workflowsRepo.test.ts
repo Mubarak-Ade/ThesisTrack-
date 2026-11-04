@@ -10,6 +10,7 @@ import { api } from '@/lib/api/http';
 import {
   createWorkflow,
   deleteWorkflow,
+  duplicateWorkflow,
   getWorkflow,
   listWorkflows,
   patchWorkflow,
@@ -200,6 +201,34 @@ describe('workflow writes (FR-CW-01…03 + PROPOSED isDefault delta)', () => {
     await deleteWorkflow('wf-1');
 
     expect(del).toHaveBeenCalledWith('/workflows/wf-1');
+  });
+
+  it('duplicate POSTs the new name/session and returns archivedWorkflowId (ADR-17)', async () => {
+    post.mockResolvedValue({
+      ...detail({ ...SUMMARY, id: 'wf-2', name: 'BSc Software Engineering (2027/2028)' }),
+      archivedWorkflowId: 'wf-1',
+    });
+
+    const result = await duplicateWorkflow('wf-1', {
+      name: 'BSc Software Engineering (2027/2028)',
+      academicSession: '2027/2028',
+    });
+
+    expect(post).toHaveBeenCalledWith('/workflows/wf-1/duplicate', {
+      name: 'BSc Software Engineering (2027/2028)',
+      academicSession: '2027/2028',
+    });
+    expect(result.workflow.id).toBe('wf-2');
+    expect(result.stages).toHaveLength(1);
+    expect(result.archivedWorkflowId).toBe('wf-1');
+  });
+
+  it('duplicate tolerates a null archivedWorkflowId (source already archived)', async () => {
+    post.mockResolvedValue({ ...detail({ ...SUMMARY, id: 'wf-3' }), archivedWorkflowId: null });
+
+    const result = await duplicateWorkflow('wf-1', { name: 'Copy' });
+
+    expect(result.archivedWorkflowId).toBeNull();
   });
 
   it('propagates server rejections verbatim — no fake success (Rule 3)', async () => {

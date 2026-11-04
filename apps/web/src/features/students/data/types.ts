@@ -18,8 +18,8 @@ export type ThesisStatus =
 
 export interface StudentRow {
   name: string;
-  /** Display code — fixtures keep mockup STU-2024-001; live derives STU-XXXX from the id. */
-  code: string;
+  /** The student's registration number; `null` only for grandfathered legacy rows. */
+  registrationNumber: string | null;
   email: string;
   /** Managed department display label — 'Unaffiliated' when the account carries none. */
   program: string;

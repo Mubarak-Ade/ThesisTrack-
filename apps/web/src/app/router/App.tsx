@@ -65,10 +65,12 @@ import Departments from '@/features/departments/screens/Departments';
  * - Authenticated screens sit under `RequireAuth` → `RoleShell`: one shell
  *   that picks layout + nav by `user.role`, so `/dashboard` resolves per
  *   role (§10.3) rather than being a fixed admin list.
- * - `RequireRole` wraps role-specific subtrees: the whole `/users*` and
- *   department directory are administrator-only (§4.5), `/supervision/*` is
- *   the supervisor caseload and `/project/*` is the student's own project
- *   (both per §10.3's column comments). Mismatch → `/forbidden`.
+ * - `RequireRole` wraps role-specific subtrees: `/users*` and the academic
+ *   oversight screens are administrator+coordinator (the coordinator is
+ *   department-scoped by the API), the department directory stays
+ *   administrator-only, `/supervision/*` is the supervisor caseload and
+ *   `/project/*` is the student's own project (both per §10.3's column
+ *   comments). Mismatch → `/forbidden`.
  * - `/proposals/*`, `/notifications`, `/settings` stay reachable by every
  *   role — their screens scope the data themselves.
  * - Screens whose build step lands in a later phase render PendingScreen
@@ -128,9 +130,10 @@ export default function App() {
             </Route>
           </Route>
 
-          {/* Administrator subtree (§4.5): directory, fixtures and the gap
-              screens that ship with the admin phase. */}
-          <Route element={<RequireRole roles={['administrator']} />}>
+          {/* Administrator/coordinator subtree (§4.5, design 2026-11-02):
+              the academic-oversight surface is shared, but department
+              management stays super-admin only (nested guard below). */}
+          <Route element={<RequireRole roles={['administrator', 'coordinator']} />}>
             <Route path="/faculty" element={<SupervisorList />} />
             <Route path="/students" element={<StudentList />} />
             <Route path="/users" element={<UserList />} />
@@ -142,8 +145,11 @@ export default function App() {
             <Route path="/assignments" element={<AdminAssignments />} />
             <Route path="/workflows" element={<WorkflowList />} />
             <Route path="/workflows/:workflowId" element={<WorkflowEditor />} />
-            {/* Managed department list (design 2026-10-28 — ADR-11 reversal). */}
-            <Route path="/departments" element={<Departments />} />
+            {/* Managed department list (design 2026-10-28 — ADR-11 reversal).
+                Super-admin only: a coordinator's own department is locked. */}
+            <Route element={<RequireRole roles={['administrator']} />}>
+              <Route path="/departments" element={<Departments />} />
+            </Route>
             <Route path="/monitoring" element={<AdminMonitoring />} />
             <Route path="/reports" element={<AdminReports />} />
           </Route>

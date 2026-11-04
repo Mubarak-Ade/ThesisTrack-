@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import type { Department } from '@/features/departments/data/types';
+import { useAuthStore } from '@/stores/auth';
+import type { PublicUser } from '@/lib/api/http';
 import type { CreatedUser } from '../data/types';
 import { createUser } from '../data/usersRepo';
 import UserCreate from './UserCreate';
@@ -74,6 +76,7 @@ function createdStudent(extra: Partial<CreatedUser['user']> = {}): CreatedUser {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useAuthStore.setState({ user: null, status: 'anonymous', accessToken: null });
 });
 
 describe('UserCreate (plan 5)', () => {
@@ -268,5 +271,64 @@ describe('UserCreate (plan 5)', () => {
       await screen.findByText(/unable to create the account/i),
     ).toBeInTheDocument();
     expect(screen.queryByText('Profile loaded')).not.toBeInTheDocument();
+  });
+});
+
+const COORDINATOR: PublicUser = {
+  id: '00000000-0000-4000-8000-0000000000c1',
+  email: 'cora.coordinator@test.local',
+  firstName: 'Cora',
+  lastName: 'Coordinator',
+  role: 'coordinator',
+  isActive: true,
+  createdAt: '2026-09-01T00:00:00.000Z',
+  department: { id: INF.id, name: INF.name, code: INF.code },
+};
+
+describe('UserCreate coordinator scope (design 2026-11-02)', () => {
+  beforeEach(() => {
+    useAuthStore.setState({
+      user: COORDINATOR,
+      status: 'authenticated',
+      accessToken: 'token',
+    });
+  });
+
+  it('locks the department and offers only student/supervisor roles', () => {
+    renderCreate();
+
+    const roleSelect = screen.getByLabelText('System Role');
+    const options = Array.from(roleSelect.querySelectorAll('option'))
+      .map((option) => option.value)
+      .filter(Boolean);
+    expect(options).toEqual(['student', 'supervisor']);
+
+    const department = screen.getByLabelText('Academic Department') as HTMLSelectElement;
+    expect(department).toBeDisabled();
+    expect(department.value).toBe(INF.id);
+    expect(screen.getByText('Locked to your department (design 2026-11-02).')).toBeInTheDocument();
+  });
+
+  it('submits the session department even though the control is disabled', async () => {
+    vi.mocked(createUser).mockResolvedValue(createdStudent());
+
+    renderCreate();
+    fillIdentity();
+    fireEvent.change(screen.getByLabelText('System Role'), { target: { value: 'student' } });
+    fireEvent.change(screen.getByLabelText(/Registration Number/i), {
+      target: { value: 'CST/22/INF/00001' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add User' }));
+
+    await waitFor(() => expect(createUser).toHaveBeenCalledTimes(1));
+    expect(createUser).toHaveBeenCalledWith({
+      firstName: 'Console',
+      lastName: 'E2E',
+      email: 'console-e2e@test.local',
+      role: 'student',
+      registrationNumber: 'CST/22/INF/00001',
+      departmentId: INF.id,
+    });
   });
 });

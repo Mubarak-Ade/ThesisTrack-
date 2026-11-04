@@ -1,5 +1,12 @@
 import { db } from '../../config/db.js';
-import { BusinessRuleError, ConflictError, NotFoundError, ValidationError } from '../../errors/index.js';
+import { departmentScope } from '../../authz/scope.js';
+import {
+  AuthorizationError,
+  BusinessRuleError,
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from '../../errors/index.js';
 import type { AuthUser } from '../../middleware/auth.js';
 import { findUserById } from '../users/service.js';
 import {
@@ -77,6 +84,9 @@ export async function listProjectsFor(
       return { projects: [], total: 0 };
     }
     filters.projectIds = projectIds;
+  } else if (user.role === 'coordinator') {
+    filters.departmentId = departmentScope(user) ?? undefined;
+    if (query.studentId) filters.studentId = query.studentId;
   } else if (query.studentId) {
     // Administrator narrowing to one student (§16.3 User details fan-out).
     filters.studentId = query.studentId;
@@ -101,12 +111,23 @@ export async function listProjectsFor(
  * stage advancement runs — §5.9 grants that only to a transaction that IS an
  * approval.
  */
-export async function createProject(actorId: string, input: CreateProjectInput): Promise<ProjectRow> {
+export async function createProject(
+  actor: AuthUser,
+  input: CreateProjectInput,
+): Promise<ProjectRow> {
   const student = await findUserById(input.studentId);
   if (!student || student.role !== 'student') {
     throw new ValidationError('Invalid student', [
       { path: 'studentId', message: 'Student not found' },
     ]);
+  }
+
+  if (actor.role === 'coordinator') {
+    const scope = departmentScope(actor);
+    if (student.departmentId !== scope) {
+      // Out of scope = the student resource does not exist for this caller.
+      throw new NotFoundError('Student');
+    }
   }
 
   const existing = await repo.findActiveProjectForStudent(input.studentId);
@@ -118,6 +139,15 @@ export async function createProject(actorId: string, input: CreateProjectInput):
   // `workflowId` — the §5.4 templateId discipline (§3.4: approval never fails
   // on workflow data, but an explicit bad id is still a request error).
   const workflow = await resolveWorkflowForProject(input.workflowId, student.departmentId);
+
+  // A coordinator may use its own department's workflow or the default; a
+  // foreign department's definition is an operation on another scope (403).
+  if (actor.role === 'coordinator' && workflow?.departmentId) {
+    if (workflow.departmentId !== departmentScope(actor)) {
+      throw new AuthorizationError('You can only use your department workflow');
+    }
+  }
+
   const stages = workflow ? await loadWorkflowStages(workflow.id) : [];
 
   try {
@@ -135,7 +165,7 @@ export async function createProject(actorId: string, input: CreateProjectInput):
 
       await repo.backfillActiveAssignmentProject(input.studentId, project.id, tx);
       await repo.insertProjectStages(
-        buildStageSnapshotValues(stages, project.id, actorId),
+        buildStageSnapshotValues(stages, project.id, actor.id),
         tx,
       );
       return project;
