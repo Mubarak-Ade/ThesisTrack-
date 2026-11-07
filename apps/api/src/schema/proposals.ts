@@ -52,6 +52,16 @@ export const proposals = pgTable(
     uniqueIndex('idx_proposals_in_flight').on(table.studentId).where(
       sql`status IN ('draft','submitted','under_review','revision_required')`,
     ),
+
+    // Project library corpus (ADR-18) — pg_trgm GIN indexes over the approved
+    // proposal text. Declared in the schema so drizzle-kit push owns them; the
+    // extension itself is created by `migrate:library` BEFORE the first push.
+    index('idx_proposals_title_trgm').using('gin', table.title.op('gin_trgm_ops')),
+    index('idx_proposals_abstract_trgm').using(
+      'gin',
+      table.abstract.op('gin_trgm_ops'),
+    ),
+    index('idx_proposals_body_trgm').using('gin', table.body.op('gin_trgm_ops')),
   ],
 );
 

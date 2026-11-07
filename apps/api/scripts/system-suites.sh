@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# system-suites.sh — run all six bash system suites against the TEST database.
+# system-suites.sh — run all seven bash system suites against the TEST database.
 #
 # The suites are pure HTTP: they only reach a database through the server they
 # drive. So this script boots that server itself with DATABASE_URL from
@@ -9,7 +9,7 @@
 #
 # Two servers, mirroring the established run pattern:
 #   :4002  normal ACCESS_TOKEN_TTL   — user-mgmt, rbac, assignment, workflow,
-#                                      coordinator-scope
+#                                      coordinator-scope, project-library
 #   :4001  ACCESS_TOKEN_TTL=3        — auth-flow (its expiry tests need a token
 #                                      that actually expires mid-suite)
 #
@@ -122,9 +122,10 @@ run rbac "$SUITE_PORT" tests/rbac.sh
 run assignment "$SUITE_PORT" tests/assignment.sh
 run workflow "$SUITE_PORT" tests/system/workflow.sh
 run coordinator-scope "$SUITE_PORT" tests/coordinator-scope.sh
+run project-library "$SUITE_PORT" tests/project-library.sh
 
 if [ "$fails" -gt 0 ]; then
   echo "system-suites: $fails suite(s) failed" >&2
   exit 1
 fi
-echo "system-suites: all six suites green against the test database"
+echo "system-suites: all seven suites green against the test database"

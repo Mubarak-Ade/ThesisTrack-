@@ -5,6 +5,7 @@ import healthRoutes from './routes/health.js';
 import { routes as authRoutes } from './modules/auth/index.js';
 import { routes as usersRoutes } from './modules/users/index.js';
 import { routes as projectsRoutes } from './modules/projects/index.js';
+import { routes as projectLibraryRoutes } from './modules/project-library/index.js';
 import { routes as supervisorAssignmentsRoutes } from './modules/supervisor-assignments/index.js';
 import { routes as proposalsRoutes } from './modules/proposals/index.js';
 import { routes as milestonesRoutes } from './modules/milestones/index.js';
@@ -44,6 +45,9 @@ api.use(healthRoutes);
 api.use('/auth', authRoutes);
 api.use(usersRoutes);
 api.use(projectsRoutes);
+// Read-only institution-wide projection (ADR-18) — intentionally separate from
+// `/projects`, which keeps its scoped/management semantics.
+api.use(projectLibraryRoutes);
 api.use(supervisorAssignmentsRoutes);
 api.use(proposalsRoutes);
 api.use(milestonesRoutes);

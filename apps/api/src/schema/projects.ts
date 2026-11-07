@@ -32,6 +32,16 @@ export const projects = pgTable(
     uniqueIndex('idx_projects_active_unique')
       .on(table.studentId)
       .where(sql`status = 'active'`),
+
+    // Project library search (ADR-18) — pg_trgm GIN indexes. Declared in the
+    // schema so drizzle-kit push owns them (an out-of-band index would be
+    // reported as drift and dropped). The extension itself is created by
+    // `migrate:library` BEFORE the first push.
+    index('idx_projects_title_trgm').using('gin', table.title.op('gin_trgm_ops')),
+    index('idx_projects_description_trgm').using(
+      'gin',
+      table.description.op('gin_trgm_ops'),
+    ),
   ],
 );
 

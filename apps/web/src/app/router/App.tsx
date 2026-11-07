@@ -56,6 +56,7 @@ import WorkflowEditor from '@/features/admin/screens/WorkflowEditor';
 import AdminMonitoring from '@/features/admin/screens/AdminMonitoring';
 import AdminReports from '@/features/admin/screens/AdminReports';
 import Departments from '@/features/departments/screens/Departments';
+import ProjectLibrary from '@/features/project-library/screens/ProjectLibrary';
 
 /**
  * Route table (spec §10.3, PROPOSED — the tree below is its literal shape):
@@ -98,6 +99,15 @@ export default function App() {
           <Route path="/proposals/:proposalId/edit" element={<ProposalEditor />} />
           <Route path="/notifications" element={<NotificationsScreen />} />
           <Route path="/settings" element={<SettingsScreen />} />
+
+          {/* Project Library (ADR-18) — one institution-wide read-only screen
+              shared by supervisor, coordinator and administrator. Kept outside
+              the management subtree so all three roles use the same route. */}
+          <Route
+            element={<RequireRole roles={['supervisor', 'coordinator', 'administrator']} />}
+          >
+            <Route path="/project-library" element={<ProjectLibrary />} />
+          </Route>
 
           {/* Student, post-approval (§10.3 column comment) — the §16.3
               "My Project" section: one layout resolving the project, five

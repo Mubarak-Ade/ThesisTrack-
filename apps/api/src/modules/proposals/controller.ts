@@ -8,8 +8,10 @@ import type {
   PatchProposalInput,
   ProposalParams,
   ReviewProposalInput,
+  SimilarProjectsQuery,
 } from './schema.js';
 import * as service from './service.js';
+import { findSimilarForProposal } from '../project-library/service.js';
 
 /*
  * Thin handlers: guards (RBAC → validate → resource → workflow) already ran
@@ -112,4 +114,12 @@ export const review = asyncHandler(async (req, res) => {
 export const listReviews = asyncHandler(async (req, res) => {
   const { proposalId } = req.params as ProposalParams;
   respond(res, 200, { reviews: await service.listReviewsFor(proposalId) });
+});
+
+// GET /proposals/:proposalId/similar-projects — advisory library matches
+// (design 2026-11-05, ADR-18). The route guard cached and authorised the
+// proposal; this never widens scope and never returns proposal body text.
+export const similarProjects = asyncHandler(async (req, res) => {
+  const { limit } = req.query as unknown as SimilarProjectsQuery;
+  respond(res, 200, { matches: await findSimilarForProposal(req.proposal!, limit) });
 });

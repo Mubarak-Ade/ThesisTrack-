@@ -18,6 +18,7 @@ import {
   patchProposalSchema,
   proposalParamsSchema,
   reviewProposalSchema,
+  similarProjectsQuerySchema,
 } from './schema.js';
 import { PROPOSAL_ACTION_ROLES, PROPOSAL_TRANSITIONS, type ProposalAction } from './service.js';
 import type { ProposalStatus } from './types.js';
@@ -62,6 +63,17 @@ router.get(
   validate(proposalParamsSchema, 'params'),
   requireProposalAccess(),
   controller.show,
+);
+
+// Advisory similar-projects list (design 2026-11-05, ADR-18). It inherits the
+// router-level requireDepartmentScope(), so a coordinator stays department-scoped
+// (foreign proposal → 404). The owner is deliberately not an allowed level.
+router.get(
+  '/proposals/:proposalId/similar-projects',
+  validate(proposalParamsSchema, 'params'),
+  validate(similarProjectsQuerySchema, 'query'),
+  requireProposalAccess({ allow: ['supervisor', 'coordinator', 'admin'] }),
+  controller.similarProjects,
 );
 
 router.get(

@@ -18,6 +18,8 @@ import { useAuthStore } from '@/stores/auth';
 import AttachmentList from '../components/AttachmentList';
 import ProposalReviews from '../components/ProposalReviews';
 import ProposalStatusBadge from '../components/ProposalStatusBadge';
+import SimilarProjectsCard from '../components/SimilarProjectsCard';
+import { useProposalSimilar } from '../hooks/useProposals';
 import { downloadAttachment } from '../data/proposalsRepo';
 import { isProposalEditable, type ReviewDecision } from '../data/types';
 import {
@@ -65,6 +67,18 @@ export default function ProposalDetail() {
   const [comment, setComment] = useState('');
   const [commentError, setCommentError] = useState<string | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
+
+  // ADR-18 — the hook must run before any early return (rules of hooks), and
+  // it stays disabled until the proposal has loaded and the viewer is a
+  // reviewer. The owner is deliberately excluded: the endpoint would 403.
+  const canSeeSimilar =
+    !!query.data &&
+    !!user &&
+    user.id !== query.data.proposal.studentId &&
+    (user.role === 'supervisor' ||
+      user.role === 'administrator' ||
+      user.role === 'coordinator');
+  const similar = useProposalSimilar(proposalId, canSeeSimilar);
 
   if (query.isPending && !query.data) {
     return (
@@ -295,6 +309,8 @@ export default function ProposalDetail() {
           </CardContent>
         </Card>
 
+        {canSeeSimilar && <SimilarProjectsCard proposalId={proposal.id} enabled={canSeeSimilar} />}
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Review history</CardTitle>
@@ -405,7 +421,26 @@ export default function ProposalDetail() {
       <ConfirmDialog
         open={confirmApprove}
         title="Approve this proposal?"
-        description="This will create the project and lock the proposal."
+        description={
+          <div className="flex flex-col gap-2">
+            <p>This will create the project and lock the proposal.</p>
+            {similar.isPending || similar.isError ? (
+              <p>Similarity check unavailable.</p>
+            ) : (similar.data?.length ?? 0) > 0 ? (
+              <div>
+                <p className="font-medium text-foreground">Similar existing projects:</p>
+                <ul className="list-disc pl-5">
+                  {similar.data!.slice(0, 3).map((match) => (
+                    <li key={match.id}>{match.title}</li>
+                  ))}
+                </ul>
+                {similar.data!.length > 3 && (
+                  <p>and {similar.data!.length - 3} more</p>
+                )}
+              </div>
+            ) : null}
+          </div>
+        }
         confirmLabel="Approve"
         loading={review.isPending}
         onConfirm={() => {

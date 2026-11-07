@@ -11,6 +11,7 @@
     "seed:departments": "tsx src/scripts/seed-departments.ts",
     "seed:workflows": "tsx src/scripts/seed-workflows.ts",
     "migrate:coordinator": "tsx src/scripts/migrate-coordinator-role.ts",
+    "migrate:library": "tsx src/scripts/migrate-project-library.ts",
     "authz:selftest": "tsx src/scripts/authz-selftest.ts",
     "build": "tsc",
     "start": "node dist/src/server.js",

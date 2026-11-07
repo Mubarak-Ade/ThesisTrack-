@@ -13,6 +13,8 @@ import {
   submitProposal,
 } from '../data/proposalsRepo';
 import type { Proposal, ProposalDetail as Detail, ProposalReview } from '../data/types';
+import { listSimilarForProposal } from '../data/similarProjects';
+import type { SimilarProject } from '../data/similarProjects';
 import { useAuthStore } from '@/stores/auth';
 
 vi.mock('../data/proposalsRepo', () => ({
@@ -26,6 +28,9 @@ vi.mock('../data/proposalsRepo', () => ({
   downloadAttachment: vi.fn(),
   startProposalReview: vi.fn(),
   reviewProposal: vi.fn(),
+}));
+vi.mock('../data/similarProjects', () => ({
+  listSimilarForProposal: vi.fn(),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
@@ -102,6 +107,17 @@ const NEW_REVIEW: ProposalReview = {
   reviewer: { id: 'sup-1', firstName: 'Helen', lastName: 'Brooks', email: 'h.brooks@test.local' },
 };
 
+const SIMILAR: SimilarProject = {
+  id: 'lib-1',
+  title: 'Campus energy ledger',
+  status: 'active',
+  session: '2025/2026',
+  student: { firstName: 'Kari', lastName: 'Berg' },
+  department: { name: 'Informatics' },
+  score: 0.62,
+  excerpt: 'A shared ledger for campus energy.',
+};
+
 const renderDetail = () =>
   render(
     <MemoryRouter initialEntries={['/proposals/p-1']}>
@@ -125,6 +141,7 @@ beforeEach(() => {
     proposal: { ...OWNER, status: 'approved' },
     review: NEW_REVIEW,
   });
+  vi.mocked(listSimilarForProposal).mockResolvedValue([]);
   signIn('s-1');
 });
 
@@ -175,6 +192,14 @@ describe('ProposalDetail', () => {
 
     expect(screen.queryByRole('button', { name: /remove proposal-v2/i })).toBeNull();
     expect(screen.getByRole('button', { name: 'Download proposal-v2.pdf' })).toBeInTheDocument();
+  });
+
+  it('never asks the similarity API for the owner and hides the card', async () => {
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Campus ledger' });
+
+    expect(screen.queryByText('Similar existing projects')).toBeNull();
+    expect(listSimilarForProposal).not.toHaveBeenCalled();
   });
 
   it('removes an editable document through the repository', async () => {
@@ -280,5 +305,93 @@ describe('ProposalDetail — reviewer (§16.4 decision form)', () => {
       }),
     );
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('shows advisory similar projects to a reviewer', async () => {
+    vi.mocked(getProposal).mockResolvedValue(detailOf({ ...OWNER, status: 'under_review' }));
+    vi.mocked(listSimilarForProposal).mockResolvedValue([SIMILAR]);
+    signIn('sup-1', 'supervisor');
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Campus ledger' });
+
+    expect(await screen.findByText('Similar existing projects')).toBeInTheDocument();
+    expect(await screen.findByText(SIMILAR.title)).toBeInTheDocument();
+    expect(listSimilarForProposal).toHaveBeenCalledWith('p-1');
+    expect(screen.getByText('Review decision')).toBeInTheDocument();
+  });
+
+  it('shows the empty message when nothing matches', async () => {
+    vi.mocked(getProposal).mockResolvedValue(detailOf({ ...OWNER, status: 'under_review' }));
+    vi.mocked(listSimilarForProposal).mockResolvedValue([]);
+    signIn('sup-1', 'supervisor');
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Campus ledger' });
+
+    expect(
+      await screen.findByText('No similar projects found in the library.'),
+    ).toBeInTheDocument();
+  });
+
+  it('offers an inline retry when similarity fails, without breaking review', async () => {
+    const user = userEvent.setup();
+    vi.mocked(getProposal).mockResolvedValue(detailOf({ ...OWNER, status: 'under_review' }));
+    vi.mocked(listSimilarForProposal).mockRejectedValue(new Error('offline'));
+    signIn('sup-1', 'supervisor');
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Campus ledger' });
+
+    expect(await screen.findByText(/similar projects could not be loaded/i)).toBeInTheDocument();
+    expect(screen.getByText('Review decision')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /try again/i }));
+    await waitFor(() =>
+      expect(vi.mocked(listSimilarForProposal).mock.calls.length).toBeGreaterThan(1),
+    );
+  });
+
+  it('lists up to three matches in the approve confirmation', async () => {
+    const user = userEvent.setup();
+    vi.mocked(getProposal).mockResolvedValue(detailOf({ ...OWNER, status: 'under_review' }));
+    vi.mocked(listSimilarForProposal).mockResolvedValue([
+      SIMILAR,
+      { ...SIMILAR, id: 'lib-2', title: 'Second ledger' },
+      { ...SIMILAR, id: 'lib-3', title: 'Third ledger' },
+      { ...SIMILAR, id: 'lib-4', title: 'Fourth ledger' },
+    ]);
+    signIn('sup-1', 'supervisor');
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Campus ledger' });
+    await screen.findByText(SIMILAR.title);
+
+    await user.click(screen.getByRole('button', { name: /^approve$/i }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(SIMILAR.title)).toBeInTheDocument();
+    expect(within(dialog).getByText('Third ledger')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Fourth ledger')).toBeNull();
+    expect(within(dialog).getByText('and 1 more')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: /^approve$/i }));
+    await waitFor(() =>
+      expect(reviewProposal).toHaveBeenCalledWith('p-1', {
+        decision: 'approved',
+        comment: undefined,
+      }),
+    );
+  });
+
+  it('says the similarity check is unavailable while loading, and still approves', async () => {
+    const user = userEvent.setup();
+    vi.mocked(getProposal).mockResolvedValue(detailOf({ ...OWNER, status: 'under_review' }));
+    vi.mocked(listSimilarForProposal).mockImplementation(() => new Promise(() => {}));
+    signIn('sup-1', 'supervisor');
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Campus ledger' });
+
+    await user.click(screen.getByRole('button', { name: /^approve$/i }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Similarity check unavailable.')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: /^approve$/i }));
+    await waitFor(() => expect(reviewProposal).toHaveBeenCalled());
   });
 });

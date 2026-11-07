@@ -5,6 +5,7 @@ import {
   FileBarChart2,
   FolderGit2,
   FolderKanban,
+  FolderSearch,
   GitBranch,
   GraduationCap,
   LayoutDashboard,
@@ -37,6 +38,11 @@ export interface NavState {
 }
 
 const DASHBOARD: NavItem = { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' };
+const PROJECT_LIBRARY: NavItem = {
+  label: 'Project Library',
+  icon: FolderSearch,
+  to: '/project-library',
+};
 const PROPOSALS: NavItem = { label: 'Proposals', icon: ScrollText, to: '/proposals' };
 const NOTIFICATIONS: NavItem = { label: 'Notifications', icon: Bell, to: '/notifications' };
 const SETTINGS: NavItem = { label: 'Settings', icon: Settings, to: '/settings' };
@@ -74,6 +80,7 @@ export function navForRole(role: Role, state: NavState): NavItem[] {
       return [
         DASHBOARD,
         { label: 'Students', icon: UserRound, to: '/supervision' },
+        PROJECT_LIBRARY,
         PROPOSALS,
         NOTIFICATIONS,
         SETTINGS,
@@ -90,6 +97,7 @@ export function navForRole(role: Role, state: NavState): NavItem[] {
         { label: 'Faculty', icon: GraduationCap, to: '/faculty' },
         { label: 'Students', icon: UserRound, to: '/students' },
         { label: 'Projects', icon: FolderGit2, to: '/projects' },
+        PROJECT_LIBRARY,
         PROPOSALS,
         { label: 'Assignments', icon: UserCheck, to: '/assignments' },
         { label: 'Workflows', icon: GitBranch, to: '/workflows' },
@@ -108,6 +116,7 @@ export function navForRole(role: Role, state: NavState): NavItem[] {
         { label: 'Faculty', icon: GraduationCap, to: '/faculty' },
         { label: 'Students', icon: UserRound, to: '/students' },
         { label: 'Projects', icon: FolderGit2, to: '/projects' },
+        PROJECT_LIBRARY,
         PROPOSALS,
         { label: 'Assignments', icon: UserCheck, to: '/assignments' },
         { label: 'Workflows', icon: GitBranch, to: '/workflows' },

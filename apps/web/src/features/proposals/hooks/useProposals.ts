@@ -11,6 +11,7 @@ import {
   submitProposal,
   uploadAttachment,
 } from '../data/proposalsRepo';
+import { listSimilarForProposal } from '../data/similarProjects';
 import type {
   CreateProposalInput,
   EditProposalInput,
@@ -48,6 +49,23 @@ export function useProposal(proposalId: string | undefined) {
     },
     enabled: !!proposalId,
     staleTime: 10_000,
+  });
+}
+
+/**
+ * ADR-18 — advisory duplicate detection for the review panel. The caller
+ * passes `enabled` so a student (owner) never fires a request the API would
+ * answer with 403.
+ */
+export function useProposalSimilar(proposalId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['proposal-similar', proposalId],
+    queryFn: async () => {
+      if (!proposalId) throw new Error('missing proposal id');
+      return listSimilarForProposal(proposalId);
+    },
+    enabled: enabled && !!proposalId,
+    staleTime: 30_000,
   });
 }
 

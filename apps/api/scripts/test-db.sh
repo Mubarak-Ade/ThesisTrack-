@@ -32,11 +32,20 @@ if [ -n "$PRIMARY_URL" ] && [ "$DATABASE_URL" = "$PRIMARY_URL" ]; then
 fi
 
 cmd="${1:-status}"
+
+# The project-library schema declares GIN trigram indexes, so `pg_trgm` must
+# exist before drizzle-kit push runs. The extension lives in schema `public`,
+# so a reset drops it and must recreate it after the new schema is made.
+enable_trgm() {
+  npx tsx src/scripts/migrate-project-library.ts >/dev/null
+}
+
 case "$cmd" in
   status)
     echo "test database: $DATABASE_URL"
     ;;
   push)
+    enable_trgm
     npx drizzle-kit push --force
     ;;
   migrate)
@@ -58,6 +67,7 @@ await db.execute(sql`DROP SCHEMA public CASCADE`);
 await db.execute(sql`CREATE SCHEMA public`);
 console.log('test-db: schema reset');
 EOF
+    enable_trgm
     npx drizzle-kit push --force
     ADMIN_EMAIL="${ADMIN_EMAIL:-admin@gmail.com}" \
     ADMIN_PASSWORD="${ADMIN_PASSWORD:-aim1234}" \

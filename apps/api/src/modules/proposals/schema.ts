@@ -50,6 +50,15 @@ export const listProposalsQuerySchema = paginationQuerySchema.extend({
 });
 
 /**
+ * GET /proposals/:proposalId/similar-projects — design 2026-11-05 (ADR-18).
+ * Similar lists are capped at 5 by default and 10 at most; they are not
+ * paginated (§6.5).
+ */
+export const similarProjectsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(10).default(5),
+});
+
+/**
  * POST /proposals/:proposalId/review — `comment` required for
  * `revision_required` and `rejected` (§11.3). `templateId` is the optional
  * §5.4 milestone-template selection; absence falls back to the seeded
@@ -76,4 +85,5 @@ export type AttachmentParams = z.infer<typeof attachmentParamsSchema>;
 export type CreateProposalInput = z.infer<typeof createProposalSchema>;
 export type PatchProposalInput = z.infer<typeof patchProposalSchema>;
 export type ListProposalsQuery = z.infer<typeof listProposalsQuerySchema>;
+export type SimilarProjectsQuery = z.infer<typeof similarProjectsQuerySchema>;
 export type ReviewProposalInput = z.infer<typeof reviewProposalSchema>;

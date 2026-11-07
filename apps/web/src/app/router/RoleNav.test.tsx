@@ -133,6 +133,7 @@ describe('role-aware shell (spec §10.3/§10.5)', () => {
       'Faculty',
       'Students',
       'Projects',
+      'Project Library',
       'Proposals',
       'Assignments',
       'Monitoring',
@@ -156,6 +157,7 @@ describe('role-aware shell (spec §10.3/§10.5)', () => {
       'Faculty',
       'Students',
       'Projects',
+      'Project Library',
       'Proposals',
       'Assignments',
       'Workflows',
@@ -176,11 +178,22 @@ describe('role-aware shell (spec §10.3/§10.5)', () => {
     renderApp('/dashboard');
     const rail = await sidebar();
 
-    for (const label of ['Dashboard', 'Students', 'Proposals', 'Notifications', 'Settings']) {
+    for (const label of ['Dashboard', 'Students', 'Project Library', 'Proposals', 'Notifications', 'Settings']) {
       expect(within(rail).getByText(label), `supervisor nav: ${label}`).toBeTruthy();
     }
     for (const label of ['Faculty', 'Projects', 'Assignments', 'Monitoring', 'Reports', 'My Project']) {
       expect(within(rail).queryByText(label), `not in supervisor nav: ${label}`).toBeNull();
+    }
+  });
+
+  it('links Project Library to /project-library for every reader role', async () => {
+    for (const role of ['supervisor', 'coordinator', 'administrator'] as const) {
+      installAdapter(adapterFor(role));
+      const { unmount } = renderApp('/dashboard');
+      const rail = await sidebar();
+      const link = within(rail).getByRole('link', { name: /Project Library/i });
+      expect(link.getAttribute('href')).toBe('/project-library');
+      unmount();
     }
   });
 
@@ -195,7 +208,7 @@ describe('role-aware shell (spec §10.3/§10.5)', () => {
     }
     // Cross-role items stay out; the footer's "Student" role title is not a
     // nav entry — query the plural directory label instead.
-    for (const label of ['Students', 'Faculty', 'Projects', 'Assignments', 'My Project']) {
+    for (const label of ['Students', 'Faculty', 'Projects', 'Project Library', 'Assignments', 'My Project']) {
       expect(within(rail).queryByText(label), `not in student nav: ${label}`).toBeNull();
     }
   });
