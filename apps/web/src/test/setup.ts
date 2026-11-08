@@ -41,3 +41,25 @@ if (!Range.prototype.getBoundingClientRect) {
   Range.prototype.getBoundingClientRect = () =>
     new DOMRect(0, 0, 0, 0);
 }
+
+// jsdom has no object-URL factory. Inline preview and the download helper use
+// it; tests spy on these functions to assert create/revoke behaviour.
+if (typeof URL.createObjectURL !== 'function') {
+  URL.createObjectURL = () => 'blob:jsdom';
+}
+if (typeof URL.revokeObjectURL !== 'function') {
+  URL.revokeObjectURL = () => {};
+}
+
+// jsdom's Blob predates `text()`; the preview reads plain text/CSV that way.
+// FileReader is available, so the polyfill stays faithful to browser output.
+if (typeof Blob.prototype.text !== 'function') {
+  Blob.prototype.text = function readBlobText(this: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ''));
+      reader.onerror = () => reject(reader.error ?? new Error('Could not read blob'));
+      reader.readAsText(this);
+    });
+  };
+}

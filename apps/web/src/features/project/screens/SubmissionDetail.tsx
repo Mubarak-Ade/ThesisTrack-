@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Download, History, MessageSquare, Send, Trash2 } from 'lucide-react';
+import { ArrowLeft, Download, Eye, History, MessageSquare, Send, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import ConfirmDialog from '@/components/feedback/ConfirmDialog';
 import EmptyState from '@/components/feedback/EmptyState';
+import FilePreviewDialog from '@/components/files/FilePreviewDialog';
 import ErrorState from '@/components/feedback/ErrorState';
 import LoadingState from '@/components/feedback/LoadingState';
 import { ApiError } from '@/lib/api/http';
@@ -16,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { formatRelative } from '@/lib/utils/time';
 import FeedbackThread from '@/components/project/FeedbackThread';
 import VersionComposer from '../components/VersionComposer';
-import type { SubmissionStatus } from '../data/types';
+import type { SubmissionStatus, SubmissionVersion } from '../data/types';
 import { downloadVersion } from '../data/projectRepo';
 import {
   useAppendVersion,
@@ -72,6 +73,7 @@ export default function SubmissionDetail() {
   const removeFeedback = useDeleteFeedback(projectId);
 
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [preview, setPreview] = useState<SubmissionVersion | null>(null);
 
   if (submission.isPending || versions.isPending) {
     return <LoadingState label="Loading submission…" />;
@@ -232,6 +234,16 @@ export default function SubmissionDetail() {
               ) : version.originalFilename ? (
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
                   <span className="text-foreground">{version.originalFilename}</span>
+                  {version.mimeType && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Preview ${version.originalFilename}`}
+                      onClick={() => setPreview(version)}
+                    >
+                      <Eye aria-hidden="true" /> Preview
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"
@@ -311,6 +323,26 @@ export default function SubmissionDetail() {
           />
         </CardContent>
       </Card>
+
+      <FilePreviewDialog
+        target={
+          preview
+            ? {
+                filename: preview.originalFilename ?? 'document',
+                mimeType: preview.mimeType ?? '',
+                sizeBytes: preview.sizeBytes ?? 0,
+                path: `/submission-versions/${preview.id}/download`,
+              }
+            : null
+        }
+        onClose={() => setPreview(null)}
+        onDownload={() => {
+          if (!preview) return;
+          void downloadVersion(preview).catch((error: unknown) =>
+            toast.error(error instanceof Error ? error.message : 'Download failed.'),
+          );
+        }}
+      />
 
       <ConfirmDialog
         open={confirmDelete}

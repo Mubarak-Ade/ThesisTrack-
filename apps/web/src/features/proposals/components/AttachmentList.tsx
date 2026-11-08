@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, FileText, Lock, Trash2 } from 'lucide-react';
+import { Download, Eye, FileText, Lock, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import ConfirmDialog from '@/components/feedback/ConfirmDialog';
@@ -22,6 +22,8 @@ interface AttachmentListProps {
    */
   showRemove?: boolean;
   onDownload: (attachment: ProposalAttachment) => void;
+  /** Opens the inline viewer; omitted where preview is not wired. */
+  onPreview?: (attachment: ProposalAttachment) => void;
   onRemove: (attachment: ProposalAttachment) => void;
   removingId?: string | null;
 }
@@ -38,6 +40,7 @@ export default function AttachmentList({
   editable,
   showRemove = true,
   onDownload,
+  onPreview,
   onRemove,
   removingId = null,
 }: AttachmentListProps) {
@@ -70,6 +73,17 @@ export default function AttachmentList({
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {onPreview && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onPreview(attachment)}
+                  aria-label={`Preview ${attachment.originalFilename}`}
+                >
+                  <Eye aria-hidden="true" /> Preview
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="ghost"

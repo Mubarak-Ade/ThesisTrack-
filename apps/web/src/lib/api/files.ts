@@ -48,6 +48,27 @@ export async function downloadFile(path: string, fallbackName: string): Promise<
   }
 }
 
+/**
+ * GET a file as bytes for in-app preview. Unlike `downloadFile` this hands the
+ * Blob back to the caller (to render from an object URL or feed a document
+ * renderer) instead of triggering the browser download. Auth, refresh and
+ * error normalisation are the same as every other byte read.
+ */
+export async function fetchFileBlob(
+  path: string,
+  fallbackName = 'document',
+): Promise<{ blob: Blob; filename: string }> {
+  try {
+    const res = await client.get<Blob>(path, { responseType: 'blob' });
+    return {
+      blob: res.data,
+      filename: filenameFromDisposition(res.headers['content-disposition'], fallbackName),
+    };
+  } catch (error) {
+    throw error instanceof ApiError ? error : normalizeError(error);
+  }
+}
+
 /** `onUploadProgress` reports — 0…100, `null` before the first tick. */
 export type UploadProgress = (percent: number | null) => void;
 

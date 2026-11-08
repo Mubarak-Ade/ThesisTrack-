@@ -17,6 +17,7 @@ const FILE: ProposalAttachment = {
 };
 
 const onDownload = vi.fn();
+const onPreview = vi.fn();
 const onRemove = vi.fn();
 
 function renderList(props: Partial<Parameters<typeof AttachmentList>[0]> = {}) {
@@ -48,6 +49,20 @@ describe('AttachmentList (§11.3 / I14)', () => {
     renderList();
     await user.click(screen.getByRole('button', { name: 'Download proposal-v2.pdf' }));
     expect(onDownload).toHaveBeenCalledWith(FILE);
+  });
+
+  it('opens the inline preview only when the host wires it', async () => {
+    const user = userEvent.setup();
+    renderList({ onPreview });
+    await user.click(screen.getByRole('button', { name: 'Preview proposal-v2.pdf' }));
+    expect(onPreview).toHaveBeenCalledWith(FILE);
+    expect(onDownload).not.toHaveBeenCalled();
+  });
+
+  it('hides Preview when no preview handler is provided', () => {
+    renderList();
+    expect(screen.queryByRole('button', { name: /preview proposal-v2/i })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Download proposal-v2.pdf' })).toBeEnabled();
   });
 
   it('removes after a destructive confirmation (§16.1)', async () => {

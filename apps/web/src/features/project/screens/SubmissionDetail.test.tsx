@@ -12,6 +12,13 @@ import type {
   SubmissionVersion,
 } from '../data/types';
 import { useAuthStore } from '@/stores/auth';
+import { fetchFileBlob } from '@/lib/api/files';
+
+vi.mock('@/lib/api/files', () => ({
+  fetchFileBlob: vi.fn(),
+  downloadFile: vi.fn(),
+  uploadFile: vi.fn(),
+}));
 
 vi.mock('../data/projectRepo', () => ({
   listMyProjects: vi.fn(),
@@ -208,6 +215,31 @@ describe('SubmissionDetail (§16.3, plan 11.3 — history/discussion split)', ()
     const button = await screen.findByRole('button', { name: /download/i }); // the v1 file row
     await user.click(button);
     expect(downloadVersion).toHaveBeenCalledWith(VERSIONS[1]);
+  });
+
+  it('opens an inline preview for a file version while Download stays', async () => {
+    vi.mocked(getSubmission).mockResolvedValue(REVISION);
+    vi.mocked(listVersions).mockResolvedValue(VERSIONS);
+    vi.mocked(fetchFileBlob).mockResolvedValue({
+      blob: new Blob(['%PDF-1.7'], { type: 'application/pdf' }),
+      filename: 'chapter.pdf',
+    });
+    renderDetail('sub-2');
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Preview chapter.pdf' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'chapter.pdf' });
+    expect(within(dialog).getByRole('button', { name: /^download$/i })).toBeInTheDocument();
+    expect(fetchFileBlob).toHaveBeenCalledWith(
+      '/submission-versions/v-1/download',
+      'chapter.pdf',
+    );
+    // The version-list Download is still there, outside the dialog.
+    const listDownloads = screen
+      .getAllByRole('button', { name: /download/i })
+      .filter((button) => !dialog.contains(button));
+    expect(listDownloads[0]).toBeEnabled();
   });
 
   it('renders the formal review decisions apart from discussion (§11.6 vs §11.7)', async () => {

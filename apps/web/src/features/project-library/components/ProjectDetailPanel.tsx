@@ -5,7 +5,7 @@ import ErrorState from '@/components/feedback/ErrorState';
 import LoadingState from '@/components/feedback/LoadingState';
 import { Button } from '@/components/ui/button';
 import SimilarProjectsList from '@/components/library/SimilarProjectsList';
-import { useFocusTrap } from '../hooks/useFocusTrap';
+import { useFocusTrap } from '@/lib/hooks/useFocusTrap';
 import { useLibraryProject } from '../hooks/useProjectLibrary';
 
 export interface ProjectDetailPanelProps {

@@ -15,6 +15,7 @@ import {
 import type { Proposal, ProposalDetail as Detail, ProposalReview } from '../data/types';
 import { listSimilarForProposal } from '../data/similarProjects';
 import type { SimilarProject } from '../data/similarProjects';
+import { fetchFileBlob } from '@/lib/api/files';
 import { useAuthStore } from '@/stores/auth';
 
 vi.mock('../data/proposalsRepo', () => ({
@@ -31,6 +32,11 @@ vi.mock('../data/proposalsRepo', () => ({
 }));
 vi.mock('../data/similarProjects', () => ({
   listSimilarForProposal: vi.fn(),
+}));
+vi.mock('@/lib/api/files', () => ({
+  fetchFileBlob: vi.fn(),
+  downloadFile: vi.fn(),
+  uploadFile: vi.fn(),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
@@ -209,6 +215,27 @@ describe('ProposalDetail', () => {
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Remove document' }));
     await waitFor(() => expect(removeAttachment).toHaveBeenCalledWith('a-1'));
+  });
+
+  it('opens an inline preview for a document while Download stays available', async () => {
+    vi.mocked(fetchFileBlob).mockResolvedValue({
+      blob: new Blob(['%PDF-1.7'], { type: 'application/pdf' }),
+      filename: 'proposal-v2.pdf',
+    });
+    const user = userEvent.setup();
+    renderDetail();
+    await screen.findByRole('heading', { name: 'Campus ledger' });
+
+    await user.click(screen.getByRole('button', { name: 'Preview proposal-v2.pdf' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'proposal-v2.pdf' });
+    expect(within(dialog).getByRole('button', { name: /^download$/i })).toBeInTheDocument();
+    expect(fetchFileBlob).toHaveBeenCalledWith(
+      '/proposal-attachments/a-1/download',
+      'proposal-v2.pdf',
+    );
+    // The list-level Download is untouched by preview.
+    expect(screen.getByRole('button', { name: 'Download proposal-v2.pdf' })).toBeEnabled();
   });
 
   it('renders the honest not-found state on 404 (null detail)', async () => {

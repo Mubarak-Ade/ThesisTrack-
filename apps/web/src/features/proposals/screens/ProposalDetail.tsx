@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Textarea } from '@/components/ui/textarea';
 import ConfirmDialog from '@/components/feedback/ConfirmDialog';
 import EmptyState from '@/components/feedback/EmptyState';
+import FilePreviewDialog from '@/components/files/FilePreviewDialog';
 import ErrorState from '@/components/feedback/ErrorState';
 import LoadingState from '@/components/feedback/LoadingState';
 import SampleDataBanner from '@/components/feedback/SampleDataBanner';
@@ -21,7 +22,7 @@ import ProposalStatusBadge from '../components/ProposalStatusBadge';
 import SimilarProjectsCard from '../components/SimilarProjectsCard';
 import { useProposalSimilar } from '../hooks/useProposals';
 import { downloadAttachment } from '../data/proposalsRepo';
-import { isProposalEditable, type ReviewDecision } from '../data/types';
+import { isProposalEditable, type ProposalAttachment, type ReviewDecision } from '../data/types';
 import {
   useProposal,
   useRemoveAttachment,
@@ -67,6 +68,7 @@ export default function ProposalDetail() {
   const [comment, setComment] = useState('');
   const [commentError, setCommentError] = useState<string | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
+  const [preview, setPreview] = useState<ProposalAttachment | null>(null);
 
   // ADR-18 — the hook must run before any early return (rules of hooks), and
   // it stays disabled until the proposal has loaded and the viewer is a
@@ -299,6 +301,7 @@ export default function ProposalDetail() {
               onDownload={(attachment) =>
                 downloadAttachment(attachment).catch((error) => toast.error(errorMessage(error)))
               }
+              onPreview={setPreview}
               onRemove={(attachment) =>
                 remove.mutate(attachment.id, {
                   onSuccess: () => toast.success('Document removed.'),
@@ -308,6 +311,24 @@ export default function ProposalDetail() {
             />
           </CardContent>
         </Card>
+
+        <FilePreviewDialog
+          target={
+            preview
+              ? {
+                  filename: preview.originalFilename,
+                  mimeType: preview.mimeType,
+                  sizeBytes: preview.sizeBytes,
+                  path: `/proposal-attachments/${preview.id}/download`,
+                }
+              : null
+          }
+          onClose={() => setPreview(null)}
+          onDownload={() => {
+            if (!preview) return;
+            downloadAttachment(preview).catch((error) => toast.error(errorMessage(error)));
+          }}
+        />
 
         {canSeeSimilar && <SimilarProjectsCard proposalId={proposal.id} enabled={canSeeSimilar} />}
 
