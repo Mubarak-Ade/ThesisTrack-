@@ -1,10 +1,14 @@
 import { pgEnum } from 'drizzle-orm/pg-core';
 
+// Order matters for drizzle-kit push: `migrate:coordinator` appends the value
+// with `ALTER TYPE … ADD VALUE`, so every migrated database orders it last.
+// Declaring it anywhere else makes push try to drop/recreate the enum, which
+// collides with the `users_coordinator_department` check.
 export const userRoleEnum = pgEnum('user_role', [
   'student',
   'supervisor',
-  'coordinator',
   'administrator',
+  'coordinator',
 ]);
 
 export const projectStatusEnum = pgEnum('project_status', ['active', 'completed', 'archived']);
